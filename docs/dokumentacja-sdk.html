@@ -1,0 +1,1584 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Dokumentacja techniczna biblioteki klienckiej LoyaltyClub Java SDK: analiza kontraktu API, decyzje architektoniczne, realizacja, weryfikacja i korzysci inzynierskie.">
+<style>
+  /* Minimalny reset — reszta stylow znajduje sie w arkuszu dokumentu ponizej. */
+  html { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Dokumentacja LoyaltyClub Java SDK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+</head>
+<body>
+<style>
+  /* ============================================================
+     Paleta: atrament granatowy, chłodny papier, wirydian, sjena.
+     Jasny motyw definiuje komplet tokenów; warianty ciemne
+     nadpisują wyłącznie wartości tokenów.
+     ============================================================ */
+  :root {
+    --paper:        #F3F5F6;
+    --surface:      #FFFFFF;
+    --surface-sunk: #EAEEEF;
+    --ink:          #14181D;
+    --ink-soft:     #3D4A4E;
+    --ink-faint:    #6C7B7E;
+    --rule:         #D3DADB;
+    --rule-strong:  #B4C0C1;
+    --accent:       #0B6355;
+    --accent-soft:  #E0EDE9;
+    --accent-ink:   #06463C;
+    --signal:       #A9501F;
+    --signal-soft:  #F6EAE1;
+    --code-bg:      #EDF1F1;
+    --shadow:       0 1px 2px rgba(20, 24, 29, .06), 0 8px 24px -16px rgba(20, 24, 29, .18);
+
+    --measure: 68ch;
+    --step--1: .8125rem;
+    --step-0:  1rem;
+    --step-1:  1.1875rem;
+    --step-2:  1.4375rem;
+    --step-3:  1.8125rem;
+    --step-4:  2.375rem;
+    --step-5:  3.125rem;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:        #12171A;
+      --surface:      #191F23;
+      --surface-sunk: #0E1315;
+      --ink:          #E7EDED;
+      --ink-soft:     #B3C0C0;
+      --ink-faint:    #7E8E8E;
+      --rule:         #2A3438;
+      --rule-strong:  #3C4A4E;
+      --accent:       #45B79D;
+      --accent-soft:  #17302B;
+      --accent-ink:   #7FD3BF;
+      --signal:       #D9855A;
+      --signal-soft:  #2B1D15;
+      --code-bg:      #0E1315;
+      --shadow:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:        #12171A;
+    --surface:      #191F23;
+    --surface-sunk: #0E1315;
+    --ink:          #E7EDED;
+    --ink-soft:     #B3C0C0;
+    --ink-faint:    #7E8E8E;
+    --rule:         #2A3438;
+    --rule-strong:  #3C4A4E;
+    --accent:       #45B79D;
+    --accent-soft:  #17302B;
+    --accent-ink:   #7FD3BF;
+    --signal:       #D9855A;
+    --signal-soft:  #2B1D15;
+    --code-bg:      #0E1315;
+    --shadow:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Szkielet ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 clamp(1.25rem, 4vw, 3rem);
+  }
+
+  @media (min-width: 1040px) {
+    .shell {
+      grid-template-columns: 15.5rem minmax(0, 1fr);
+      gap: clamp(2.5rem, 5vw, 4.5rem);
+      align-items: start;
+    }
+  }
+
+  /* ---------- Nagłówek dokumentu ---------- */
+  .masthead {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--rule);
+    padding: clamp(3rem, 8vw, 6rem) 0 clamp(2rem, 4vw, 3rem);
+    margin-bottom: clamp(2rem, 4vw, 3.5rem);
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.25rem;
+  }
+
+  .masthead h1 {
+    font-family: Spectral, Georgia, "Times New Roman", serif;
+    font-weight: 700;
+    font-size: clamp(2.25rem, 6vw, var(--step-5));
+    line-height: 1.08;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0 0 1.25rem;
+    max-width: 20ch;
+  }
+
+  .masthead .lede {
+    font-size: var(--step-1);
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 58ch;
+    margin: 0;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-top: clamp(2rem, 4vw, 3rem);
+  }
+
+  .meta-grid div {
+    background: var(--surface);
+    padding: .875rem 1rem;
+  }
+
+  .meta-grid dt {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .6875rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 .3rem;
+  }
+
+  .meta-grid dd {
+    margin: 0;
+    font-size: var(--step--1);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Spis treści ---------- */
+  .toc {
+    display: none;
+  }
+
+  @media (min-width: 1040px) {
+    .toc {
+      display: block;
+      position: sticky;
+      top: 2rem;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      padding-bottom: 2rem;
+      font-size: var(--step--1);
+    }
+  }
+
+  .toc h2 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .6875rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    margin: 0 0 .875rem;
+  }
+
+  .toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    counter-reset: toc;
+  }
+
+  .toc a {
+    display: grid;
+    grid-template-columns: 1.75rem 1fr;
+    gap: .4rem;
+    padding: .3rem .5rem .3rem .625rem;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    line-height: 1.4;
+    transition: color .12s ease, border-color .12s ease;
+  }
+
+  .toc a::before {
+    counter-increment: toc;
+    content: counter(toc);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .6875rem;
+    color: var(--ink-faint);
+    padding-top: .18em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .toc a:hover { color: var(--ink); }
+
+  .toc a.is-current {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 500;
+  }
+
+  .toc a.is-current::before { color: var(--accent); }
+
+  /* ---------- Treść ---------- */
+  .doc { min-width: 0; padding-bottom: 6rem; }
+
+  section[id] {
+    scroll-margin-top: 2rem;
+    padding-bottom: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  h2.chapter {
+    font-family: Spectral, Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(1.6rem, 3.5vw, var(--step-3));
+    line-height: 1.2;
+    letter-spacing: -.01em;
+    text-wrap: balance;
+    margin: 0 0 1.25rem;
+    padding-top: 1.75rem;
+    border-top: 2px solid var(--ink);
+    display: grid;
+    grid-template-columns: 2.75rem 1fr;
+    gap: .5rem;
+    align-items: baseline;
+  }
+
+  h2.chapter .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .8125rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: .04em;
+  }
+
+  h3 {
+    font-family: Spectral, Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.3;
+    margin: 2.25rem 0 .75rem;
+    text-wrap: balance;
+  }
+
+  h4 {
+    font-size: var(--step-0);
+    font-weight: 600;
+    margin: 1.75rem 0 .5rem;
+  }
+
+  p, li { max-width: var(--measure); }
+
+  p { margin: 0 0 1.1rem; }
+
+  .doc ul, .doc ol {
+    margin: 0 0 1.25rem;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+
+  .doc li { padding-left: .25rem; }
+  .doc li::marker { color: var(--accent); }
+
+  a {
+    color: var(--accent);
+    text-underline-offset: .18em;
+    text-decoration-thickness: 1px;
+  }
+
+  strong { font-weight: 600; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .875em;
+    background: var(--code-bg);
+    padding: .1em .35em;
+    border-radius: 2px;
+    border: 1px solid var(--rule);
+  }
+
+  pre {
+    background: var(--surface-sunk);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.125rem;
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    line-height: 1.6;
+    margin: 0 0 1.5rem;
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  /* ---------- Tabele ---------- */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 0 0 1.75rem;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: var(--step--1);
+    line-height: 1.5;
+  }
+
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .6875rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface-sunk);
+  }
+
+  th, td {
+    text-align: left;
+    padding: .625rem 1rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-weight: 600;
+    font-size: .75rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    background: var(--surface-sunk);
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  td code { white-space: nowrap; }
+
+  .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---------- Wyróżnienia ---------- */
+  .callout {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 1rem 1.125rem;
+    margin: 0 0 1.75rem;
+    max-width: var(--measure);
+  }
+
+  .callout.warn {
+    border-left-color: var(--signal);
+    background: var(--signal-soft);
+  }
+
+  .callout p:last-child { margin-bottom: 0; }
+
+  .callout .label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .6875rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    display: block;
+    margin-bottom: .4rem;
+  }
+
+  .callout.warn .label { color: var(--signal); }
+
+  .figure {
+    margin: 0 0 1.75rem;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+  }
+
+  .figure svg { display: block; width: 100%; height: auto; }
+
+  .figure figcaption {
+    font-size: var(--step--1);
+    color: var(--ink-faint);
+    padding: .75rem 1rem;
+    border-top: 1px solid var(--rule);
+    background: var(--surface-sunk);
+  }
+
+  .figure figcaption b {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .6875rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 500;
+    margin-right: .5rem;
+  }
+
+  /* Etykiety w SVG */
+  .svg-label { font-family: "IBM Plex Sans", sans-serif; font-size: 12px; fill: var(--ink); }
+  .svg-label-sm { font-family: "IBM Plex Mono", monospace; font-size: 10px; fill: var(--ink-faint); }
+  .svg-label-strong { font-family: "IBM Plex Sans", sans-serif; font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+  .svg-box { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1; }
+  .svg-box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.25; }
+  .svg-line { stroke: var(--rule-strong); stroke-width: 1; fill: none; }
+  .svg-flow { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+
+  /* ---------- Stopka ---------- */
+  .colophon {
+    border-top: 2px solid var(--ink);
+    padding-top: 1.5rem;
+    margin-top: 2rem;
+    font-size: var(--step--1);
+    color: var(--ink-faint);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; scroll-behavior: auto !important; }
+  }
+
+  html { scroll-behavior: smooth; }
+
+  /* ---------- Druk / eksport do PDF ---------- */
+  @media print {
+    :root { --paper: #fff; --surface: #fff; --surface-sunk: #fff; --ink: #000; --ink-soft: #222; --rule: #bbb; }
+    .toc { display: none; }
+    .shell { grid-template-columns: 1fr; max-width: none; padding: 0; }
+    section[id] { break-inside: auto; }
+    h2.chapter, h3 { break-after: avoid; }
+    .table-wrap, .figure, pre { break-inside: avoid; }
+    a { color: #000; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Dokumentacja techniczna · materiał źródłowy</p>
+    <h1>LoyaltyClub Java SDK</h1>
+    <p class="lede">
+      Biblioteka kliencka w czystej Javie, integrująca systemy kasowe i platformy e-commerce
+      z API programu lojalnościowego LoyaltyClub. Dokument opisuje analizę kontraktu API,
+      decyzje architektoniczne, realizację i weryfikację biblioteki oraz korzyści inżynierskie
+      wynikające z jej zastosowania.
+    </p>
+
+    <dl class="meta-grid">
+      <div><dt>Artefakt</dt><dd>loyaltyclub-java-sdk</dd></div>
+      <div><dt>Wersja</dt><dd>1.0.0-SNAPSHOT</dd></div>
+      <div><dt>Platforma</dt><dd>Java 25 · Maven</dd></div>
+      <div><dt>Zależności runtime</dt><dd>2 (Jackson)</dd></div>
+      <div><dt>Kod produkcyjny</dt><dd>51 plików · 2 422 wiersze</dd></div>
+      <div><dt>Testy</dt><dd>49 · wszystkie zielone</dd></div>
+    </dl>
+  </header>
+
+  <nav class="toc" aria-label="Spis treści">
+    <h2>Spis treści</h2>
+    <ol>
+      <li><a href="#wprowadzenie">Wprowadzenie i zakres</a></li>
+      <li><a href="#kontekst">Kontekst systemowy</a></li>
+      <li><a href="#analiza-api">Analiza kontraktu API</a></li>
+      <li><a href="#wymagania">Wymagania</a></li>
+      <li><a href="#decyzje">Decyzje architektoniczne</a></li>
+      <li><a href="#architektura">Architektura biblioteki</a></li>
+      <li><a href="#uwierzytelnianie">Uwierzytelnianie</a></li>
+      <li><a href="#niezawodnosc">Niezawodność i idempotencja</a></li>
+      <li><a href="#dane">Model danych i serializacja</a></li>
+      <li><a href="#bledy">Obsługa błędów</a></li>
+      <li><a href="#walidacja">Walidacja po stronie klienta</a></li>
+      <li><a href="#jakosc">Zapewnienie jakości</a></li>
+      <li><a href="#zalety">Zalety stosowania SDK</a></li>
+      <li><a href="#ograniczenia">Ograniczenia i rozwój</a></li>
+      <li><a href="#zrodla">Wykaz źródeł</a></li>
+    </ol>
+  </nav>
+
+  <main class="doc">
+
+    <!-- ============ 1 ============ -->
+    <section id="wprowadzenie">
+      <h2 class="chapter"><span class="num">01</span><span>Wprowadzenie i zakres</span></h2>
+
+      <p>
+        LoyaltyClub Java SDK jest biblioteką kliencką, która udostępnia aplikacjom napisanym
+        w Javie typowany, wysokopoziomowy dostęp do interfejsu REST programu lojalnościowego
+        LoyaltyClub. Biblioteka zastępuje ręczne konstruowanie żądań HTTP, obsługę
+        uwierzytelniania, ponowień i parsowania błędów zestawem metod odpowiadających
+        operacjom biznesowym systemu.
+      </p>
+
+      <p>
+        Zakres funkcjonalny obejmuje dwie ścieżki integracyjne przewidziane przez backend:
+        <strong>integrację kasową</strong> (<code>/api/store/**</code>), realizującą naliczanie
+        i wycofywanie punktów za transakcje sprzedaży oraz zwrotu, a także
+        <strong>integrację e-commerce</strong> (<code>/api/ecom/**</code> oraz
+        <code>/api/coupon/**</code>), obejmującą odczyt profilu lojalnościowego klienta,
+        historii punktowej i kuponów oraz wymianę punktów na kupon i jego walidację.
+      </p>
+
+      <p>
+        Poza zakresem świadomie pozostawiono panel administracyjny (<code>/api/admin/**</code>),
+        który nie jest przeznaczony do integracji z systemami zewnętrznymi, lecz obsługuje
+        wewnętrzną aplikację operatora programu.
+      </p>
+
+      <h3>Struktura dokumentu</h3>
+      <p>
+        Rozdziały 2–3 przedstawiają analizę systemu docelowego, stanowiącą podstawę projektu
+        biblioteki. Rozdziały 4–11 opisują wymagania, decyzje projektowe i realizację
+        poszczególnych mechanizmów. Rozdział 12 dokumentuje weryfikację, rozdział 13
+        omawia korzyści inżynierskie płynące z zastosowania biblioteki w aplikacjach,
+        a rozdział 14 wskazuje ograniczenia i kierunki dalszych prac.
+      </p>
+    </section>
+
+    <!-- ============ 2 ============ -->
+    <section id="kontekst">
+      <h2 class="chapter"><span class="num">02</span><span>Kontekst systemowy</span></h2>
+
+      <p>
+        System LoyaltyClub jest monolityczną aplikacją serwerową zbudowaną w oparciu
+        o Spring Boot 3.2.3 na platformie Java 21, z bazą PostgreSQL i migracjami
+        zarządzanymi przez Liquibase. Interfejs REST jest wystawiany domyślnie na porcie
+        8089 i podzielony na cztery przestrzenie adresowe, z których każda odpowiada
+        odrębnej klasie odbiorców i odrębnej roli bezpieczeństwa.
+      </p>
+
+      <figure class="figure">
+        <svg viewBox="0 0 760 300" role="img" aria-label="Diagram kontekstu: systemy kasowy i e-commerce łączą się przez SDK z API backendu LoyaltyClub i bazą danych">
+          <!-- Systemy klienckie -->
+          <rect class="svg-box" x="14" y="46" width="150" height="60" rx="2"/>
+          <text class="svg-label-strong" x="30" y="72">System kasowy (POS)</text>
+          <text class="svg-label-sm" x="30" y="90">rola STORE</text>
+
+          <rect class="svg-box" x="14" y="150" width="150" height="60" rx="2"/>
+          <text class="svg-label-strong" x="30" y="176">Sklep internetowy</text>
+          <text class="svg-label-sm" x="30" y="194">rola ECOM</text>
+
+          <!-- SDK -->
+          <rect class="svg-box-accent" x="252" y="46" width="176" height="164" rx="2"/>
+          <text class="svg-label-strong" x="268" y="72">LoyaltyClub Java SDK</text>
+          <text class="svg-label-sm" x="268" y="94">StoreClient</text>
+          <text class="svg-label-sm" x="268" y="112">EcomClient</text>
+          <text class="svg-label-sm" x="268" y="130">CouponClient</text>
+          <line class="svg-line" x1="268" y1="144" x2="412" y2="144"/>
+          <text class="svg-label-sm" x="268" y="164">transport · auth · retry</text>
+          <text class="svg-label-sm" x="268" y="182">walidacja · mapowanie błędów</text>
+
+          <!-- Backend -->
+          <rect class="svg-box" x="516" y="24" width="150" height="42" rx="2"/>
+          <text class="svg-label" x="530" y="43">/api/store/**</text>
+          <text class="svg-label-sm" x="530" y="58">transakcje, saldo</text>
+
+          <rect class="svg-box" x="516" y="78" width="150" height="42" rx="2"/>
+          <text class="svg-label" x="530" y="97">/api/ecom/**</text>
+          <text class="svg-label-sm" x="530" y="112">profil, historia</text>
+
+          <rect class="svg-box" x="516" y="132" width="150" height="42" rx="2"/>
+          <text class="svg-label" x="530" y="151">/api/coupon/**</text>
+          <text class="svg-label-sm" x="530" y="166">wymiana, walidacja</text>
+
+          <rect class="svg-box" x="516" y="196" width="150" height="42" rx="2" stroke-dasharray="3 3"/>
+          <text class="svg-label" x="530" y="215">/api/admin/**</text>
+          <text class="svg-label-sm" x="530" y="230">poza zakresem SDK</text>
+
+          <!-- Strzałki -->
+          <path class="svg-flow" d="M164 76 H 252" marker-end="url(#ah)"/>
+          <path class="svg-flow" d="M164 180 H 252" marker-end="url(#ah)"/>
+          <path class="svg-flow" d="M428 100 H 470 V 45 H 516" marker-end="url(#ah)"/>
+          <path class="svg-flow" d="M428 128 H 470 V 99 H 516" marker-end="url(#ah)"/>
+          <path class="svg-flow" d="M428 156 H 470 V 153 H 516" marker-end="url(#ah)"/>
+
+          <text class="svg-label-sm" x="176" y="70">HTTPS</text>
+          <text class="svg-label-sm" x="440" y="94">JSON</text>
+
+          <text class="svg-label-sm" x="516" y="262">LoyaltyClub · Spring Boot 3.2.3 · PostgreSQL</text>
+
+          <defs>
+            <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/>
+            </marker>
+          </defs>
+        </svg>
+        <figcaption><b>Rys. 1</b> Kontekst systemowy biblioteki. SDK jest jedynym punktem styku aplikacji klienckiej z kontraktem HTTP backendu.</figcaption>
+      </figure>
+
+      <h3>Model uprawnień</h3>
+      <p>
+        Konfiguracja bezpieczeństwa backendu przypisuje każdej przestrzeni adresowej dokładnie
+        jedną rolę i odrzuca wszystkie żądania nieobjęte regułą. Rozdział ról ma bezpośrednie
+        konsekwencje projektowe: uzasadnia podział biblioteki na osobne, niezależnie
+        konfigurowane obiekty klienckie.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 1 · Odwzorowanie ról na przestrzenie adresowe</caption>
+          <thead>
+            <tr><th>Przestrzeń</th><th>Wymagana rola</th><th>Uwierzytelnianie</th><th>Klient w SDK</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>/api/store/**</code></td><td><code>STORE</code></td><td>JWT lub HTTP Basic</td><td><code>StoreClient</code></td></tr>
+            <tr><td><code>/api/ecom/**</code></td><td><code>ECOM</code></td><td>HTTP Basic lub JWT</td><td><code>EcomClient</code></td></tr>
+            <tr><td><code>/api/coupon/**</code></td><td><code>ECOM</code></td><td>HTTP Basic lub JWT</td><td><code>CouponClient</code></td></tr>
+            <tr><td><code>/api/admin/**</code></td><td><code>ADMIN</code>, <code>TECHNICAL</code></td><td>JWT</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <span class="label">Ustalenie z analizy</span>
+        <p>
+          Backend udostępnia endpoint logowania wyłącznie dla ról <code>STORE</code>
+          (<code>POST /api/store/auth/login</code>) oraz <code>ADMIN</code>. Dla roli
+          <code>ECOM</code> nie istnieje endpoint wydający token, mimo że filtr JWT akceptuje
+          tokeny z tą rolą. Praktyczną i domyślną metodą uwierzytelniania integracji
+          e-commerce jest zatem HTTP Basic; obsługa tokenu pozostaje dostępna dla wdrożeń,
+          które pozyskują go innym kanałem.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ 3 ============ -->
+    <section id="analiza-api">
+      <h2 class="chapter"><span class="num">03</span><span>Analiza kontraktu API</span></h2>
+
+      <p>
+        Projekt biblioteki poprzedziła analiza kodu źródłowego backendu — kontrolerów, obiektów
+        transferu danych, warstwy usług i globalnej obsługi wyjątków. Analiza kodu, a nie
+        wyłącznie dokumentacji, była konieczna, ponieważ część reguł kontraktu nie wynika
+        z sygnatur endpointów, lecz z logiki walidacyjnej usług.
+      </p>
+
+      <h3>Zinwentaryzowane operacje</h3>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 2 · Operacje objęte biblioteką</caption>
+          <thead>
+            <tr><th>Metoda i ścieżka</th><th>Wymagane nagłówki</th><th>Odwzorowanie w SDK</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>POST /api/store/auth/login</code></td><td>—</td><td>wywoływane automatycznie</td></tr>
+            <tr><td><code>GET /api/store</code></td><td>—</td><td><code>StoreClient.info()</code></td></tr>
+            <tr><td><code>POST /api/store/transactions/sale</code></td><td><code>X-CountryCode</code></td><td><code>registerSale(...)</code></td></tr>
+            <tr><td><code>POST /api/store/transactions/return</code></td><td><code>X-CountryCode</code></td><td><code>registerReturn(...)</code></td></tr>
+            <tr><td><code>GET /api/store/customers/{cn}/points</code></td><td>—</td><td><code>getPointsBalance(cn)</code></td></tr>
+            <tr><td><code>GET /api/ecom</code></td><td>—</td><td><code>EcomClient.info()</code></td></tr>
+            <tr><td><code>GET /api/ecom/customers/{cn}/points</code></td><td>—</td><td><code>getPointsBalance(cn)</code></td></tr>
+            <tr><td><code>GET /api/ecom/customers/{cn}/profile</code></td><td>—</td><td><code>getCustomerProfile(cn)</code></td></tr>
+            <tr><td><code>GET /api/ecom/customers/{cn}/transactions</code></td><td>—</td><td><code>getTransactions(cn)</code></td></tr>
+            <tr><td><code>GET /api/ecom/customers/{cn}/coupons</code></td><td>—</td><td><code>getCoupons(cn)</code></td></tr>
+            <tr><td><code>POST /api/coupon/redeem-points</code></td><td><code>Idempotency-Key</code></td><td><code>redeemPoints(key, req)</code></td></tr>
+            <tr><td><code>GET /api/coupon/validate</code></td><td>—</td><td><code>validate(code, cn)</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Reguły ukryte w warstwie usług</h3>
+      <p>
+        Analiza klasy <code>StoreTransactionService</code> oraz <code>CouponService</code>
+        ujawniła ograniczenia, których nie sposób wywnioskować z samych sygnatur endpointów,
+        a których naruszenie kończy się odpowiedzią o kodzie 400. Wiedza ta została
+        zakodowana w bibliotece — częściowo jako walidacja lokalna, częściowo jako
+        udokumentowana semantyka metod.
+      </p>
+
+      <ul>
+        <li><strong>Zgodność kwoty z pozycjami.</strong> Wartość <code>totalAmount</code> po zaokrągleniu do dwóch miejsc w trybie <code>HALF_UP</code> musi być równa sumie cen pozycji poddanej tej samej normalizacji.</li>
+        <li><strong>Unikalność numeru transakcji źródłowej.</strong> Pole <code>sourceTransactionNumber</code> musi być globalnie unikalne; backend odrzuca duplikaty.</li>
+        <li><strong>Normalizacja kodu kraju.</strong> Nagłówek <code>X-CountryCode</code> jest przycinany, zamieniany na wielkie litery i ograniczony do trzech znaków.</li>
+        <li><strong>Spójność zwrotu ze sprzedażą.</strong> Zwrot musi wskazywać transakcję sprzedaży, zgadzać się z jej krajem, nie przekraczać jej pozostałej wartości i nie dotyczyć punktów wygasłych.</li>
+        <li><strong>Deduplikacja wymiany punktów.</strong> Nagłówek <code>Idempotency-Key</code> jest utrwalany w dedykowanej tabeli; powtórzenie żądania z tym samym kluczem zwraca wcześniej wydany kupon zamiast ponownie obciążać konto punktowe.</li>
+      </ul>
+
+      <div class="callout warn">
+        <span class="label">Cecha kontraktu istotna dla klienta</span>
+        <p>
+          Globalna obsługa wyjątków backendu odwzorowuje każdy nieobsłużony
+          <code>RuntimeException</code> na kod 400. W konsekwencji błędy biznesowe
+          (przekroczona kwota zwrotu, duplikat numeru transakcji, brak punktów do wycofania)
+          są nieodróżnialne po samym kodzie odpowiedzi od błędów walidacji formularza.
+          Biblioteka rozwiązuje ten problem, udostępniając w wyjątku zarówno mapę błędów pól,
+          jak i komunikat z pola <code>detail</code> — pusta mapa błędów pól wskazuje na błąd
+          biznesowy.
+        </p>
+      </div>
+
+      <h3>Walidacja kuponu nie jest błędem protokołu</h3>
+      <p>
+        Endpoint <code>GET /api/coupon/validate</code> zwraca kod 200 również wtedy, gdy kupon
+        nie może zostać zrealizowany; werdykt znajduje się w polu <code>status</code>
+        o wartościach <code>VALID</code>, <code>COUPON_NOT_FOUND</code>,
+        <code>CUSTOMER_NOT_FOUND</code>, <code>COUPON_BELONGS_TO_ANOTHER_ACCOUNT</code>,
+        <code>COUPON_ALREADY_USED</code> lub <code>COUPON_EXPIRED</code>. Jest to typowa
+        pułapka integracyjna: implementacja oparta wyłącznie na kodach HTTP zaakceptowałaby
+        kupon już wykorzystany. Biblioteka wymusza właściwą interpretację, udostępniając
+        typ wyliczeniowy oraz metodę <code>isValid()</code>.
+      </p>
+    </section>
+
+    <!-- ============ 4 ============ -->
+    <section id="wymagania">
+      <h2 class="chapter"><span class="num">04</span><span>Wymagania</span></h2>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 3 · Wymagania funkcjonalne</caption>
+          <thead><tr><th class="num-col">Id</th><th>Wymaganie</th></tr></thead>
+          <tbody>
+            <tr><td class="num-col">WF-1</td><td>Rejestracja transakcji sprzedaży wraz z pozycjami paragonu i naliczenie punktów.</td></tr>
+            <tr><td class="num-col">WF-2</td><td>Rejestracja zwrotu powiązanego z wcześniejszą sprzedażą i wycofanie punktów.</td></tr>
+            <tr><td class="num-col">WF-3</td><td>Odczyt salda punktów w rozbiciu na oczekujące, dostępne i wygasłe.</td></tr>
+            <tr><td class="num-col">WF-4</td><td>Odczyt profilu lojalnościowego klienta wraz z progiem i kodem polecającym.</td></tr>
+            <tr><td class="num-col">WF-5</td><td>Odczyt historii punktowej oraz listy kuponów klienta.</td></tr>
+            <tr><td class="num-col">WF-6</td><td>Wymiana punktów na kupon z zachowaniem idempotencji operacji.</td></tr>
+            <tr><td class="num-col">WF-7</td><td>Walidacja kuponu przy składaniu zamówienia.</td></tr>
+            <tr><td class="num-col">WF-8</td><td>Uwierzytelnianie tokenem JWT z automatycznym logowaniem oraz uwierzytelnianie HTTP Basic.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 4 · Wymagania niefunkcjonalne</caption>
+          <thead><tr><th class="num-col">Id</th><th>Wymaganie</th><th>Realizacja</th></tr></thead>
+          <tbody>
+            <tr><td class="num-col">WN-1</td><td>Możliwość wpięcia w dowolny projekt Java 25 bez narzucania frameworku aplikacyjnego.</td><td>brak zależności od Springa; transport z JDK</td></tr>
+            <tr><td class="num-col">WN-2</td><td>Minimalny ślad na ścieżce klas aplikacji hosta.</td><td>dwie zależności runtime, artefakt ok. 125 KiB</td></tr>
+            <tr><td class="num-col">WN-3</td><td>Bezpieczeństwo współbieżne — jedna instancja klienta obsługuje wiele wątków.</td><td>obiekty niezmienne, blokada przy odświeżaniu tokenu</td></tr>
+            <tr><td class="num-col">WN-4</td><td>Odporność na przejściowe awarie sieci i backendu.</td><td>polityka ponowień z wykładniczym opóźnieniem</td></tr>
+            <tr><td class="num-col">WN-5</td><td>Brak ryzyka podwójnego naliczenia punktów wskutek ponowienia.</td><td>klasyfikacja operacji według bezpieczeństwa powtórzenia</td></tr>
+            <tr><td class="num-col">WN-6</td><td>Odporność na rozszerzenia kontraktu API bez rekompilacji.</td><td>ignorowanie nieznanych pól, wartość <code>UNKNOWN</code> dla enumów</td></tr>
+            <tr><td class="num-col">WN-7</td><td>Diagnozowalność błędów — czytelne komunikaty i dostęp do szczegółów odpowiedzi.</td><td>hierarchia wyjątków nad <code>ProblemDetail</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 5 ============ -->
+    <section id="decyzje">
+      <h2 class="chapter"><span class="num">05</span><span>Decyzje architektoniczne</span></h2>
+
+      <p>
+        Poniższe zestawienie dokumentuje decyzje o istotnym wpływie na architekturę biblioteki
+        wraz z rozważanymi alternatywami i konsekwencjami przyjętego rozwiązania.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 5 · Rejestr decyzji architektonicznych</caption>
+          <thead><tr><th>Decyzja</th><th>Alternatywy</th><th>Uzasadnienie</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Transport oparty na <code>java.net.http.HttpClient</code></strong></td>
+              <td>OkHttp, Apache HttpClient, Spring <code>RestClient</code></td>
+              <td>Klient HTTP wchodzi w skład JDK od wersji 11, więc nie powiększa ścieżki klas ani nie tworzy ryzyka konfliktu wersji z aplikacją hosta. Rozwiązania oparte na Springu wykluczyłyby użycie w projektach niekorzystających z tego frameworku.</td>
+            </tr>
+            <tr>
+              <td><strong>Jackson jako jedyna zależność runtime</strong></td>
+              <td>własny parser JSON, Gson, JSON-B</td>
+              <td>Backend serializuje odpowiedzi Jacksonem; użycie tej samej biblioteki gwarantuje zgodność formatu dat i liczb. Własny parser oznaczałby istotny koszt utrzymania przy znikomym zysku.</td>
+            </tr>
+            <tr>
+              <td><strong>Jeden artefakt Maven</strong></td>
+              <td>podział na moduły <code>core</code>, <code>store</code>, <code>ecom</code></td>
+              <td>Wielkość biblioteki nie uzasadnia kosztu wersjonowania i publikowania kilku artefaktów. Rozdział odpowiedzialności realizuje struktura pakietów, co upraszcza wdrożenie i aktualizację po stronie hosta.</td>
+            </tr>
+            <tr>
+              <td><strong>Osobne obiekty klienckie dla store i ecom</strong></td>
+              <td>jeden klient z metodami obu integracji</td>
+              <td>Role <code>STORE</code> i <code>ECOM</code> są rozłączne — pojedyncze poświadczenia nigdy nie obejmują obu przestrzeni. Osobne klienty czynią tę granicę widoczną w API biblioteki i uniemożliwiają wywołanie operacji niedostępnej dla danego konta.</td>
+            </tr>
+            <tr>
+              <td><strong>Ponowienia zależne od operacji, nie globalne</strong></td>
+              <td>jednolita polityka dla wszystkich żądań</td>
+              <td>Ponowienie rejestracji sprzedaży po błędzie sieci grozi podwójnym naliczeniem punktów. Klasyfikacja operacji według bezpieczeństwa powtórzenia jest jedynym poprawnym rozwiązaniem tego problemu.</td>
+            </tr>
+            <tr>
+              <td><strong>Klucz idempotencji przekazywany jawnie</strong></td>
+              <td>automatyczne generowanie identyfikatora UUID</td>
+              <td>Klucz generowany przez bibliotekę przy każdej próbie byłby za każdym razem inny, co pozbawiłoby mechanizm deduplikacji jakiegokolwiek znaczenia. Klucz musi pochodzić z kontekstu biznesowego wywołującego.</td>
+            </tr>
+            <tr>
+              <td><strong>Lombok w zasięgu <code>provided</code></strong></td>
+              <td>ręcznie pisane akcesory i konstruktory</td>
+              <td>Redukcja kodu powtarzalnego w klasach modelu bez wpływu na aplikację hosta — biblioteka nie trafia do ścieżki klas w czasie wykonania.</td>
+            </tr>
+            <tr>
+              <td><strong>Interfejs synchroniczny</strong></td>
+              <td>dodatkowy wariant asynchroniczny</td>
+              <td>Docelowe zastosowania — obsługa transakcji kasowej i żądania HTTP w sklepie — są z natury synchroniczne. Wariant asynchroniczny podwoiłby powierzchnię API bez odpowiadającej korzyści; pozostaje możliwym kierunkiem rozwoju.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 6 ============ -->
+    <section id="architektura">
+      <h2 class="chapter"><span class="num">06</span><span>Architektura biblioteki</span></h2>
+
+      <p>
+        Biblioteka ma budowę warstwową. Warstwa kliencka wyraża operacje w kategoriach domeny
+        lojalnościowej i nie zawiera kodu związanego z protokołem. Warstwa transportowa
+        realizuje pojedynczy, ogólny przebieg żądania i nie zna żadnego konkretnego endpointu.
+        Rozdział ten pozwala dodać nową operację API bez ingerencji w mechanizmy ponowień,
+        uwierzytelniania i obsługi błędów.
+      </p>
+
+      <figure class="figure">
+        <svg viewBox="0 0 760 330" role="img" aria-label="Diagram warstw biblioteki: warstwa kliencka, transportowa i platformy">
+          <text class="svg-label-sm" x="16" y="22">WARSTWA KLIENCKA — operacje domenowe</text>
+          <rect class="svg-box-accent" x="14" y="32" width="230" height="66" rx="2"/>
+          <text class="svg-label-strong" x="30" y="56">StoreClient</text>
+          <text class="svg-label-sm" x="30" y="74">registerSale · registerReturn</text>
+          <text class="svg-label-sm" x="30" y="90">getPointsBalance · info</text>
+
+          <rect class="svg-box-accent" x="258" y="32" width="230" height="66" rx="2"/>
+          <text class="svg-label-strong" x="274" y="56">EcomClient</text>
+          <text class="svg-label-sm" x="274" y="74">getCustomerProfile · getPointsBalance</text>
+          <text class="svg-label-sm" x="274" y="90">getTransactions · getCoupons</text>
+
+          <rect class="svg-box-accent" x="502" y="32" width="244" height="66" rx="2"/>
+          <text class="svg-label-strong" x="518" y="56">CouponClient</text>
+          <text class="svg-label-sm" x="518" y="74">redeemPoints</text>
+          <text class="svg-label-sm" x="518" y="90">validate</text>
+
+          <path class="svg-flow" d="M129 98 V 128" marker-end="url(#ah2)"/>
+          <path class="svg-flow" d="M373 98 V 128" marker-end="url(#ah2)"/>
+          <path class="svg-flow" d="M624 98 V 128" marker-end="url(#ah2)"/>
+
+          <text class="svg-label-sm" x="16" y="152">WARSTWA TRANSPORTOWA — jeden przebieg żądania</text>
+          <rect class="svg-box" x="14" y="162" width="732" height="96" rx="2"/>
+          <text class="svg-label-strong" x="30" y="186">HttpTransport</text>
+
+          <rect class="svg-box" x="30" y="198" width="164" height="44" rx="2"/>
+          <text class="svg-label" x="42" y="218">Uwierzytelnianie</text>
+          <text class="svg-label-sm" x="42" y="234">Basic · Bearer · JWT</text>
+
+          <rect class="svg-box" x="206" y="198" width="164" height="44" rx="2"/>
+          <text class="svg-label" x="218" y="218">Ponowienia</text>
+          <text class="svg-label-sm" x="218" y="234">RetryPolicy</text>
+
+          <rect class="svg-box" x="382" y="198" width="164" height="44" rx="2"/>
+          <text class="svg-label" x="394" y="218">Serializacja</text>
+          <text class="svg-label-sm" x="394" y="234">LoyaltyClubJson</text>
+
+          <rect class="svg-box" x="558" y="198" width="172" height="44" rx="2"/>
+          <text class="svg-label" x="570" y="218">Mapowanie błędów</text>
+          <text class="svg-label-sm" x="570" y="234">ProblemDetail → wyjątek</text>
+
+          <path class="svg-flow" d="M380 258 V 288" marker-end="url(#ah2)"/>
+
+          <text class="svg-label-sm" x="16" y="312">PLATFORMA</text>
+          <rect class="svg-box" x="252" y="292" width="256" height="30" rx="2"/>
+          <text class="svg-label" x="268" y="312">java.net.http.HttpClient · Jackson</text>
+
+          <defs>
+            <marker id="ah2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/>
+            </marker>
+          </defs>
+        </svg>
+        <figcaption><b>Rys. 2</b> Warstwy biblioteki. Warstwa kliencka opisuje <i>co</i> zrobić, transportowa — <i>jak</i> to przesłać.</figcaption>
+      </figure>
+
+      <h3>Organizacja pakietów</h3>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 6 · Odpowiedzialności pakietów</caption>
+          <thead><tr><th>Pakiet</th><th>Odpowiedzialność</th></tr></thead>
+          <tbody>
+            <tr><td><code>sdk.core.http</code></td><td>Wykonanie żądania: budowa adresu, nagłówki, pętla ponowień, odwzorowanie odpowiedzi błędnych na wyjątki.</td></tr>
+            <tr><td><code>sdk.core.auth</code></td><td>Źródła poświadczeń: HTTP Basic, token statyczny, baza dla tokenu odświeżanego automatycznie.</td></tr>
+            <tr><td><code>sdk.core.retry</code></td><td>Polityka ponowień — liczba prób, opóźnienie wykładnicze z rozrzutem, zbiór kodów kwalifikujących.</td></tr>
+            <tr><td><code>sdk.core.exception</code></td><td>Hierarchia wyjątków biblioteki.</td></tr>
+            <tr><td><code>sdk.core.model</code></td><td>Typy wspólne dla obu integracji: saldo punktów, metadane usługi, <code>ProblemDetail</code>.</td></tr>
+            <tr><td><code>sdk.core.json</code></td><td>Konfiguracja mapowania JSON zgodna z kontraktem backendu.</td></tr>
+            <tr><td><code>sdk.core.util</code></td><td>Walidacja argumentów i kodowanie segmentów adresu.</td></tr>
+            <tr><td><code>sdk.store</code></td><td>Klient kasowy, walidator żądań sklepowych, uwierzytelnianie JWT, modele transakcji.</td></tr>
+            <tr><td><code>sdk.ecom</code></td><td>Klient e-commerce, klient kuponowy, modele profilu, historii i kuponów.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Konstrukcja klienta</h3>
+      <p>
+        Klienci są tworzeni wzorcem budowniczego, co pozwala na niezmienność obiektu
+        wynikowego i walidację kompletności konfiguracji w jednym miejscu. Wspólne parametry
+        — adres bazowy, limity czasu, polityka ponowień, własna pula połączeń lub własny
+        mapper JSON — są dziedziczone z klasy bazowej budowniczego, dzięki czemu oba klienty
+        oferują identyczny zestaw pokręteł konfiguracyjnych.
+      </p>
+
+      <pre><code>try (StoreClient store = StoreClient.builder()
+        .baseUrl("https://loyalty.example.com")
+        .credentials("kasa-01", "haslo")
+        .defaultCountryCode("PL")
+        .requestTimeout(Duration.ofSeconds(15))
+        .build()) {
+
+    StoreTransactionResponse odpowiedz = store.registerSale(StoreSaleRequest.builder()
+            .customerNumber("CUST-000123")
+            .sourceTransactionNumber("POS-2026-08-28-0001")
+            .totalAmount(new BigDecimal("59.98"))
+            .item(StoreTransactionItem.builder()
+                    .ean("5901234123457")
+                    .name("Kawa ziarnista 1 kg")
+                    .hierarchy(Hierarchy.builder().hierarchy("FOOD").build())
+                    .price(ItemPrice.builder()
+                            .amount(new BigDecimal("59.98"))
+                            .currency("PLN")
+                            .build())
+                    .build())
+            .build());
+}</code></pre>
+
+      <p>
+        Klient jest bezpieczny współbieżnie i przeznaczony do utworzenia raz na cykl życia
+        aplikacji. Metoda <code>close()</code> zamyka pulę połączeń wyłącznie wtedy, gdy
+        biblioteka sama ją utworzyła — instancja <code>HttpClient</code> dostarczona
+        przez aplikację pozostaje nienaruszona.
+      </p>
+    </section>
+
+    <!-- ============ 7 ============ -->
+    <section id="uwierzytelnianie">
+      <h2 class="chapter"><span class="num">07</span><span>Uwierzytelnianie</span></h2>
+
+      <p>
+        Biblioteka udostępnia trzy źródła poświadczeń ukryte za wspólnym interfejsem
+        <code>AuthenticationProvider</code>: HTTP Basic, token przekazany z zewnątrz oraz
+        token JWT pozyskiwany i odnawiany automatycznie. Warstwa transportowa nie wie,
+        który wariant jest w użyciu — dokleja nagłówek i, w razie odpowiedzi 401,
+        pyta źródło poświadczeń, czy warto ponowić żądanie.
+      </p>
+
+      <h3>Automatyczne odnawianie tokenu sklepu</h3>
+      <p>
+        Token wydawany przez backend ma czas życia 15 minut (parametr
+        <code>security.jwt.expiration-ms</code> o wartości 900 000). Ręczne zarządzanie
+        takim tokenem w aplikacji kasowej oznaczałoby konieczność śledzenia czasu wygaśnięcia
+        i obsługi wyścigu między wątkami. Biblioteka przejmuje to zadanie w całości.
+      </p>
+
+      <figure class="figure">
+        <svg viewBox="0 0 760 340" role="img" aria-label="Diagram sekwencji: pobranie tokenu, wywołanie operacji, odświeżenie po odpowiedzi 401">
+          <!-- lifelines -->
+          <rect class="svg-box" x="14" y="14" width="120" height="30" rx="2"/>
+          <text class="svg-label" x="26" y="34">Aplikacja</text>
+          <line class="svg-line" x1="74" y1="44" x2="74" y2="316" stroke-dasharray="3 4"/>
+
+          <rect class="svg-box" x="176" y="14" width="120" height="30" rx="2"/>
+          <text class="svg-label" x="188" y="34">StoreClient</text>
+          <line class="svg-line" x1="236" y1="44" x2="236" y2="316" stroke-dasharray="3 4"/>
+
+          <rect class="svg-box-accent" x="352" y="14" width="150" height="30" rx="2"/>
+          <text class="svg-label" x="364" y="34">JwtAuthentication</text>
+          <line class="svg-line" x1="427" y1="44" x2="427" y2="316" stroke-dasharray="3 4"/>
+
+          <rect class="svg-box" x="586" y="14" width="120" height="30" rx="2"/>
+          <text class="svg-label" x="598" y="34">Backend</text>
+          <line class="svg-line" x1="646" y1="44" x2="646" y2="316" stroke-dasharray="3 4"/>
+
+          <!-- 1 -->
+          <path class="svg-flow" d="M74 70 H 232" marker-end="url(#ah3)"/>
+          <text class="svg-label-sm" x="86" y="64">1. registerSale(...)</text>
+
+          <!-- 2 -->
+          <path class="svg-flow" d="M236 100 H 423" marker-end="url(#ah3)"/>
+          <text class="svg-label-sm" x="248" y="94">2. token wymagany</text>
+
+          <!-- 3 -->
+          <path class="svg-flow" d="M427 130 H 642" marker-end="url(#ah3)"/>
+          <text class="svg-label-sm" x="439" y="124">3. POST /api/store/auth/login</text>
+
+          <!-- 4 -->
+          <path class="svg-line" d="M646 158 H 431" marker-end="url(#ah4)" stroke-dasharray="4 3"/>
+          <text class="svg-label-sm" x="450" y="152">4. token + expiresAt</text>
+
+          <!-- 5 -->
+          <path class="svg-flow" d="M236 190 H 642" marker-end="url(#ah3)"/>
+          <text class="svg-label-sm" x="248" y="184">5. POST /transactions/sale + Bearer</text>
+
+          <!-- 6 -->
+          <path class="svg-line" d="M646 218 H 240" marker-end="url(#ah4)" stroke-dasharray="4 3"/>
+          <text class="svg-label-sm" x="300" y="212">6. HTTP 401 — token unieważniony</text>
+
+          <!-- 7 -->
+          <path class="svg-flow" d="M236 248 H 423" marker-end="url(#ah3)"/>
+          <text class="svg-label-sm" x="248" y="242">7. unieważnij i zaloguj ponownie</text>
+
+          <!-- 8 -->
+          <path class="svg-flow" d="M236 278 H 642" marker-end="url(#ah3)"/>
+          <text class="svg-label-sm" x="248" y="272">8. powtórzenie z nowym tokenem</text>
+
+          <!-- 9 -->
+          <path class="svg-line" d="M646 306 H 78" marker-end="url(#ah4)" stroke-dasharray="4 3"/>
+          <text class="svg-label-sm" x="300" y="300">9. HTTP 200 — StoreTransactionResponse</text>
+
+          <defs>
+            <marker id="ah3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/>
+            </marker>
+            <marker id="ah4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L8 4 L0 8 z" fill="var(--rule-strong)"/>
+            </marker>
+          </defs>
+        </svg>
+        <figcaption><b>Rys. 3</b> Przebieg wywołania z automatycznym logowaniem i odnowieniem poświadczeń po odpowiedzi 401.</figcaption>
+      </figure>
+
+      <p>
+        Mechanizm opiera się na trzech regułach. Po pierwsze, token jest wymieniany
+        <strong>zapobiegawczo</strong> — na 60 sekund przed deklarowanym czasem wygaśnięcia,
+        co pochłania rozbieżność zegarów między klientem a serwerem oraz czas przelotu
+        żądania. Po drugie, odpowiedź 401 unieważnia token i powoduje jednokrotne
+        powtórzenie żądania, <strong>bez zużywania puli ponowień</strong> — wygaśnięcie
+        poświadczeń nie jest awarią przejściową i nie powinno wyczerpywać limitu przeznaczonego
+        na awarie sieci. Po trzecie, powtórzenie następuje tylko raz; jeśli świeże poświadczenia
+        również zostaną odrzucone, biblioteka zgłasza <code>UnauthorizedException</code>
+        zamiast wpadać w pętlę.
+      </p>
+
+      <p>
+        Operacja pobrania tokenu jest chroniona blokadą z ponownym sprawdzeniem warunku, dzięki
+        czemu równoległe wątki oczekują na jedno logowanie zamiast generować ich tyle, ile
+        wątków zastało token nieważnym.
+      </p>
+    </section>
+
+    <!-- ============ 8 ============ -->
+    <section id="niezawodnosc">
+      <h2 class="chapter"><span class="num">08</span><span>Niezawodność i idempotencja</span></h2>
+
+      <p>
+        Ponowienie żądania jest najprostszym sposobem zwiększenia odporności integracji
+        na awarie przejściowe — i jednocześnie najczęstszym źródłem błędów w systemach
+        finansowych. Po błędzie sieci klient nie jest w stanie odróżnić żądania, które
+        nie dotarło do serwera, od żądania obsłużonego, którego odpowiedź zaginęła.
+        W przypadku rejestracji sprzedaży różnica ta oznacza podwójne naliczenie punktów.
+      </p>
+
+      <p>
+        Biblioteka rozwiązuje ten problem przez jawną klasyfikację każdej operacji.
+        Żądanie niesie znacznik bezpieczeństwa powtórzenia, ustawiany przez warstwę kliencką,
+        a warstwa transportowa ponawia wyłącznie żądania oznaczone jako bezpieczne.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 7 · Klasyfikacja operacji według bezpieczeństwa powtórzenia</caption>
+          <thead><tr><th>Operacja</th><th>Ponawiana</th><th>Uzasadnienie</th></tr></thead>
+          <tbody>
+            <tr><td>wszystkie operacje odczytu</td><td>tak</td><td>metody bezpieczne w rozumieniu semantyki HTTP, bez efektów ubocznych</td></tr>
+            <tr><td><code>POST /api/store/auth/login</code></td><td>tak</td><td>nie zmienia stanu biznesowego; wydanie kolejnego tokenu jest nieszkodliwe</td></tr>
+            <tr><td><code>POST /api/coupon/redeem-points</code></td><td>tak</td><td>chroniona nagłówkiem <code>Idempotency-Key</code> utrwalanym po stronie backendu</td></tr>
+            <tr><td><code>POST /api/store/transactions/sale</code></td><td><strong>nie</strong></td><td>brak mechanizmu deduplikacji; ponowienie grozi podwójnym naliczeniem punktów</td></tr>
+            <tr><td><code>POST /api/store/transactions/return</code></td><td><strong>nie</strong></td><td>jak wyżej, dla wycofania punktów</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Procedura po nieudanej rejestracji transakcji</h3>
+      <p>
+        Rezygnacja z automatycznego ponowienia rejestracji sprzedaży nie pozostawia aplikacji
+        bez rozwiązania. Backend wymusza unikalność pola <code>sourceTransactionNumber</code>,
+        co daje aplikacji bezpieczną procedurę naprawczą: po wyjątku
+        <code>LoyaltyClubTransportException</code> należy ponowić żądanie
+        <strong>z tym samym numerem transakcji źródłowej</strong>. Jeżeli pierwotne żądanie
+        zostało zapisane, powtórzenie zakończy się kodem 400 z komunikatem o duplikacie —
+        co jest sygnałem powodzenia pierwszej próby, a nie awarią. Zachowanie to jest
+        udokumentowane w dokumentacji API biblioteki, przy metodach, których dotyczy.
+      </p>
+
+      <h3>Parametry polityki ponowień</h3>
+      <p>
+        Domyślna polityka wykonuje trzy próby z opóźnieniem rosnącym wykładniczo od 200 ms
+        do 2 s, z rozrzutem losowym w zakresie ±20%. Rozrzut przeciwdziała zjawisku
+        synchronizacji ponowień wielu klientów po wspólnej awarii. Ponawiane są odpowiedzi
+        o kodach 408, 425, 429, 500, 502, 503 i 504 oraz błędy wejścia-wyjścia. Polityka
+        jest w pełni konfigurowalna, a wariant <code>RetryPolicy.none()</code> wyłącza
+        ponawianie całkowicie — na przykład wtedy, gdy aplikacja hosta dysponuje własnym
+        mechanizmem odporności.
+      </p>
+    </section>
+
+    <!-- ============ 9 ============ -->
+    <section id="dane">
+      <h2 class="chapter"><span class="num">09</span><span>Model danych i serializacja</span></h2>
+
+      <p>
+        Modele biblioteki są niezmienne i wyposażone w budowniczych, co zapewnia czytelną
+        konstrukcję obiektów o wielu polach opcjonalnych oraz eliminuje ryzyko modyfikacji
+        żądania po jego walidacji. Konfiguracja mapowania JSON została dobrana tak, aby
+        odpowiadała domyślnym ustawieniom Jacksona w aplikacji Spring Boot, którą jest backend.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 8 · Ustawienia mapowania JSON i ich uzasadnienie</caption>
+          <thead><tr><th>Ustawienie</th><th>Skutek</th><th>Powód</th></tr></thead>
+          <tbody>
+            <tr><td>Moduł <code>JavaTimeModule</code>, wyłączony zapis dat jako liczb</td><td><code>LocalDateTime</code> jako łańcuch ISO-8601 bez strefy</td><td>zgodność z formatem oczekiwanym i zwracanym przez backend</td></tr>
+            <tr><td>Pomijanie pól o wartości <code>null</code></td><td>pola nieustawione nie trafiają do żądania</td><td>backend stosuje wtedy wartości domyślne, np. bieżący czas zakupu</td></tr>
+            <tr><td>Tolerancja nieznanych pól odpowiedzi</td><td>rozszerzenie API nie powoduje błędu</td><td>zgodność w przód ze starszą wersją biblioteki</td></tr>
+            <tr><td>Domyślna wartość nieznanych stałych wyliczeniowych</td><td>nowa wartość mapuje się na <code>UNKNOWN</code></td><td>brak awarii po dodaniu nowego statusu po stronie backendu</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Reprezentacja kwot</h3>
+      <p>
+        Wszystkie wartości pieniężne i punktowe przelicznika reprezentowane są typem
+        <code>BigDecimal</code>. Wybór ten wynika z charakteru dziedziny: typy
+        zmiennoprzecinkowe nie reprezentują dokładnie wartości dziesiętnych, co przy
+        weryfikacji równości kwoty paragonu z sumą pozycji prowadziłoby do fałszywych
+        niezgodności. Walidacja lokalna stosuje tę samą normalizację co backend —
+        zaokrąglenie do dwóch miejsc w trybie <code>HALF_UP</code> i porównanie metodą
+        <code>compareTo</code>, niewrażliwą na różnice skali.
+      </p>
+
+      <h3>Typy wyliczeniowe odporne na rozszerzenia</h3>
+      <p>
+        Typy <code>TransactionType</code>, <code>TransactionState</code>
+        i <code>CouponValidationStatus</code> zawierają dodatkową stałą <code>UNKNOWN</code>,
+        oznaczoną jako wartość domyślna deserializacji. Dzięki temu wprowadzenie po stronie
+        backendu nowego stanu transakcji lub nowego werdyktu walidacji kuponu nie unieruchamia
+        aplikacji korzystających ze starszej wersji biblioteki. Semantyka wartości nieznanej
+        została udokumentowana jako odmowa — nowy, nierozpoznany werdykt kuponu nigdy nie
+        zostanie potraktowany jako zgoda.
+      </p>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section id="bledy">
+      <h2 class="chapter"><span class="num">10</span><span>Obsługa błędów</span></h2>
+
+      <p>
+        Backend zwraca błędy w formacie <i>Problem Details</i> zdefiniowanym w RFC 7807,
+        wzbogaconym przy błędach walidacji o niestandardową właściwość <code>errors</code>
+        z mapą komunikatów przypisanych do pól. Biblioteka parsuje ten dokument i odwzorowuje
+        go na hierarchię wyjątków nieweryfikowanych, zachowując jednocześnie surową treść
+        odpowiedzi na wypadek, gdy nie jest ona poprawnym dokumentem <i>Problem Details</i>.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 9 · Odwzorowanie odpowiedzi na wyjątki</caption>
+          <thead><tr><th>Sytuacja</th><th>Wyjątek</th><th>Informacja diagnostyczna</th></tr></thead>
+          <tbody>
+            <tr><td>naruszenie kontraktu wykryte lokalnie</td><td><code>LoyaltyClubValidationException</code></td><td>nazwa pola i naruszona reguła</td></tr>
+            <tr><td>HTTP 400</td><td><code>BadRequestException</code></td><td><code>getFieldErrors()</code>, <code>getDetail()</code></td></tr>
+            <tr><td>HTTP 401</td><td><code>UnauthorizedException</code></td><td>kod stanu, surowa treść odpowiedzi</td></tr>
+            <tr><td>HTTP 403</td><td><code>ForbiddenException</code></td><td>kod stanu, surowa treść odpowiedzi</td></tr>
+            <tr><td>HTTP 404</td><td><code>NotFoundException</code></td><td><code>getDetail()</code> z identyfikatorem zasobu</td></tr>
+            <tr><td>HTTP 5xx po wyczerpaniu ponowień</td><td><code>ServerException</code></td><td>kod stanu, treść odpowiedzi</td></tr>
+            <tr><td>brak połączenia, przekroczenie limitu czasu</td><td><code>LoyaltyClubTransportException</code></td><td>przyczyna źródłowa</td></tr>
+            <tr><td>błąd serializacji lub deserializacji</td><td><code>LoyaltyClubSerializationException</code></td><td>ścieżka żądania, przyczyna źródłowa</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Wspólnym nadtypem jest <code>LoyaltyClubException</code>, co pozwala aplikacji objąć
+        całą rodzinę jednym blokiem obsługi, nie wiążąc się z konkretną przyczyną. Wszystkie
+        wyjątki są nieweryfikowane, ponieważ żadna z sygnalizowanych sytuacji nie ma
+        uniwersalnego, lokalnego sposobu obsługi, który uzasadniałby wymuszenie jej deklaracji
+        w każdej sygnaturze na ścieżce wywołania.
+      </p>
+
+      <pre><code>try {
+    store.registerSale(zadanie);
+} catch (BadRequestException e) {
+    if (e.getFieldErrors().isEmpty()) {
+        // Błąd biznesowy, np. "sourceTransactionNumber must be unique"
+        log.warn("Transakcja odrzucona: {}", e.getDetail().orElse("brak szczegółów"));
+    } else {
+        // Błąd walidacji — mapa pole → komunikat
+        e.getFieldErrors().forEach((pole, komunikat) -> log.warn("{}: {}", pole, komunikat));
+    }
+} catch (LoyaltyClubTransportException e) {
+    // Stan transakcji po stronie backendu nieznany — ponów z tym samym
+    // sourceTransactionNumber (zob. rozdział 8).
+}</code></pre>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section id="walidacja">
+      <h2 class="chapter"><span class="num">11</span><span>Walidacja po stronie klienta</span></h2>
+
+      <p>
+        Biblioteka weryfikuje żądanie przed jego wysłaniem, odtwarzając ograniczenia
+        egzekwowane przez backend. Celem nie jest zastąpienie walidacji serwerowej —
+        ta pozostaje jedynym źródłem prawdy i jedynym miejscem, w którym można sprawdzić
+        warunki wymagające dostępu do danych. Celem jest skrócenie pętli sprzężenia zwrotnego:
+        błąd oczywisty, taki jak niezgodność kwoty paragonu z sumą pozycji, zostaje wykryty
+        natychmiast, w miejscu wywołania, zamiast po przejściu przez sieć i warstwę
+        bezpieczeństwa serwera.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 10 · Reguły weryfikowane lokalnie</caption>
+          <thead><tr><th>Reguła</th><th>Odpowiednik po stronie backendu</th></tr></thead>
+          <tbody>
+            <tr><td>niepuste <code>customerNumber</code>, <code>sourceTransactionNumber</code>, <code>saleTransactionNumber</code></td><td>adnotacje <code>@NotBlank</code> oraz normalizacja w usłudze</td></tr>
+            <tr><td>niepusta lista pozycji, komplet pól każdej pozycji</td><td><code>@NotEmpty</code>, <code>@Valid</code> na elementach listy</td></tr>
+            <tr><td>nieujemna kwota pozycji, niepusty kod waluty</td><td><code>@DecimalMin("0.00")</code>, <code>@NotBlank</code></td></tr>
+            <tr><td>dodatnia kwota paragonu równa sumie pozycji po zaokrągleniu do 2 miejsc</td><td><code>validateTotalAmountAgainstItems</code></td></tr>
+            <tr><td>niepusty kod kraju o długości do 3 znaków, normalizowany do wielkich liter</td><td><code>normalizeCountryCode</code></td></tr>
+            <tr><td>niepusty klucz idempotencji, identyfikator szablonu kuponu, kod kuponu</td><td><code>@NotBlank</code>, <code>@NotNull</code>, normalizacja w usłudze kuponowej</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Naruszenie którejkolwiek z reguł kończy się wyjątkiem
+        <code>LoyaltyClubValidationException</code> <strong>bez wykonania wywołania
+        sieciowego</strong>, co zostało potwierdzone testami sprawdzającymi, że serwer
+        nie odnotował żadnego żądania.
+      </p>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section id="jakosc">
+      <h2 class="chapter"><span class="num">12</span><span>Zapewnienie jakości</span></h2>
+
+      <p>
+        Weryfikację oparto na testach integracyjnych wykonywanych względem serwera-atrapy
+        zbudowanego na komponencie <code>com.sun.net.httpserver.HttpServer</code>, wchodzącym
+        w skład JDK. Rozwiązanie to pozwala testować rzeczywistą warstwę transportową —
+        łącznie z kodowaniem adresu, nagłówkami, ponowieniami i obsługą kodów stanu — bez
+        wprowadzania dodatkowych zależności testowych i bez atrapowania klienta HTTP,
+        które przesłoniłoby właśnie te mechanizmy.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 11 · Zakres weryfikacji</caption>
+          <thead><tr><th>Klasa testowa</th><th class="num-col">Testy</th><th>Zakres</th></tr></thead>
+          <tbody>
+            <tr><td><code>HttpTransportTest</code></td><td class="num-col">12</td><td>ponowienia i ich brak, odnowienie poświadczeń po 401 i brak pętli, mapowanie kodów stanu, kodowanie parametrów, normalizacja adresu bazowego, odpowiedź niebędąca dokumentem <i>Problem Details</i></td></tr>
+            <tr><td><code>StoreClientTest</code></td><td class="num-col">13</td><td>jednokrotne logowanie i ponowne użycie tokenu, ponowne logowanie po 401, nagłówek <code>X-CountryCode</code> i zgodność ciała żądania, odrzucanie żądań niepoprawnych bez wywołania sieciowego, mapowanie błędów backendu</td></tr>
+            <tr><td><code>EcomClientTest</code></td><td class="num-col">15</td><td>wszystkie operacje odczytu, kodowanie numeru klienta w ścieżce, nagłówek <code>Idempotency-Key</code>, werdykty walidacji kuponu wraz z wartością nieznaną, samodzielny klient kuponowy</td></tr>
+            <tr><td><code>LoyaltyClubJsonTest</code></td><td class="num-col">5</td><td>format <code>LocalDateTime</code>, pomijanie pól pustych, tolerancja nieznanych pól, odczyt <code>ProblemDetail</code> z właściwością <code>errors</code></td></tr>
+            <tr><td><code>RetryPolicyTest</code></td><td class="num-col">4</td><td>zbiór kodów kwalifikujących, wyłączenie ponawiania, wykładniczy wzrost i nasycenie opóźnienia, zakres rozrzutu losowego</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Łącznie 49 testów, wszystkie zakończone powodzeniem. Testy weryfikują zachowanie
+        obserwowalne z zewnątrz — treść wysłanego żądania i reakcję na odpowiedź serwera —
+        a nie strukturę wewnętrzną implementacji, dzięki czemu pozostają odporne na refaktoryzację.
+      </p>
+    </section>
+
+    <!-- ============ 13 ============ -->
+    <section id="zalety">
+      <h2 class="chapter"><span class="num">13</span><span>Zalety stosowania SDK</span></h2>
+
+      <p>
+        Biblioteka kliencka nie zwiększa możliwości systemu — wszystko, co realizuje, można
+        zaimplementować bezpośrednio na kliencie HTTP. Jej wartość leży gdzie indziej:
+        w przeniesieniu wiedzy o kontrakcie z aplikacji do jednego, weryfikowalnego miejsca
+        oraz w wyeliminowaniu klasy błędów, które przy integracji wykonywanej samodzielnie
+        pojawiają się regularnie. Poniższe zestawienie porządkuje korzyści według rodzaju.
+      </p>
+
+      <h3>13.1. Eliminacja powielania kodu integracyjnego</h3>
+      <p>
+        Bez biblioteki każda aplikacja korzystająca z API — system kasowy, sklep internetowy,
+        aplikacja mobilna, narzędzia wewnętrzne — musi samodzielnie zaimplementować
+        konfigurację klienta HTTP, uwierzytelnianie, zarządzanie cyklem życia tokenu,
+        serializację modeli, ponowienia oraz parsowanie błędów. Jest to kilkaset wierszy
+        kodu na każdą integrację, powielanych z niewielkimi wariacjami, przy czym każda
+        kopia dojrzewa własnym tempem i zawiera własny zestaw błędów. Biblioteka sprowadza
+        ten nakład do deklaracji zależności i utworzenia obiektu klienta.
+      </p>
+
+      <h3>13.2. Kontrakt wyrażony w systemie typów</h3>
+      <p>
+        Przy integracji budowanej ręcznie kontrakt API jest reprezentowany przez łańcuchy
+        znaków i mapy, a błąd — literówka w nazwie pola, pominięty nagłówek, zła ścieżka —
+        ujawnia się dopiero w czasie wykonania, często na środowisku produkcyjnym.
+        Biblioteka przenosi ten kontrakt do systemu typów języka: nazwy pól są nazwami
+        metod budowniczego, wymagane nagłówki są parametrami metod, a zbiory dopuszczalnych
+        wartości są typami wyliczeniowymi. Znaczna część błędów integracyjnych staje się
+        w ten sposób błędami kompilacji. Dodatkową korzyścią praktyczną jest podpowiadanie
+        składni i dostęp do dokumentacji operacji bezpośrednio w środowisku programistycznym.
+      </p>
+
+      <h3>13.3. Poprawna semantyka operacji wrażliwych</h3>
+      <p>
+        Jest to korzyść o najwyższej wadze biznesowej. Rozróżnienie operacji bezpiecznych
+        do powtórzenia od niebezpiecznych (rozdz. 8) oraz wymóg przekazania stabilnego klucza
+        idempotencji (rozdz. 5) chronią przed dwiema konkretnymi awariami: podwójnym
+        naliczeniem punktów za jedną transakcję oraz dwukrotnym obciążeniem konta klienta
+        przy wymianie punktów na kupon. Są to błędy kosztowne, trudne do wykrycia w testach
+        i wymagające ręcznej korekty danych. Implementacja wykonana samodzielnie, wyposażona
+        w „rozsądny” globalny mechanizm ponowień, popełnia ten błąd w sposób naturalny —
+        biblioteka czyni go niemożliwym.
+      </p>
+
+      <h3>13.4. Utrwalenie wiedzy ukrytej w kodzie serwera</h3>
+      <p>
+        Część reguł kontraktu, opisanych w rozdziale 3, nie wynika z sygnatur endpointów
+        i jest możliwa do odkrycia wyłącznie przez analizę kodu backendu lub metodą prób
+        i błędów. Biblioteka utrwala tę wiedzę — jako walidację, normalizację i dokumentację
+        w miejscu użycia — dzięki czemu nie musi być odkrywana ponownie przez każdy zespół
+        integrujący się z systemem.
+      </p>
+
+      <h3>13.5. Krótsza pętla sprzężenia zwrotnego</h3>
+      <p>
+        Walidacja lokalna (rozdz. 11) zwraca błąd natychmiast, w miejscu wywołania, wraz
+        z nazwą naruszonej reguły. Skraca to czas diagnozy podczas prac programistycznych
+        i eliminuje wywołania sieciowe, o których z góry wiadomo, że zakończą się odrzuceniem —
+        co ma znaczenie zwłaszcza przy integracjach wsadowych i w środowiskach o ograniczonej
+        przepustowości.
+      </p>
+
+      <h3>13.6. Jednolita i diagnozowalna obsługa błędów</h3>
+      <p>
+        Aplikacja otrzymuje ustrukturyzowaną hierarchię wyjątków zamiast kodu liczbowego
+        i nieprzetworzonej treści odpowiedzi. Pozwala to na różne traktowanie sytuacji
+        wymagających różnych reakcji — brak zasobu, brak uprawnień, błąd walidacji, błąd
+        biznesowy, awaria transportu — bez konieczności rozpoznawania ich po treści
+        komunikatu. Biblioteka rozwiązuje przy tym problem opisany w rozdziale 3:
+        nierozróżnialność błędów walidacji i błędów biznesowych po samym kodzie 400.
+      </p>
+
+      <h3>13.7. Odporność na ewolucję API</h3>
+      <p>
+        Tolerancja nieznanych pól i wartości wyliczeniowych (rozdz. 9) sprawia, że rozszerzenie
+        kontraktu po stronie backendu nie unieruchamia aplikacji korzystających ze starszej
+        wersji biblioteki. Gdy zmiana wymaga jednak reakcji, jej wprowadzenie sprowadza się
+        do aktualizacji jednej zależności — zamiast do zsynchronizowanej modyfikacji każdej
+        integracji z osobna. Biblioteka staje się w ten sposób pojedynczym punktem zmiany
+        dla całego ekosystemu klientów.
+      </p>
+
+      <h3>13.8. Testowalność aplikacji klienckiej</h3>
+      <p>
+        Zależność od typowanego interfejsu biblioteki jest znacznie łatwiejsza do zastąpienia
+        w testach niż zależność od surowych wywołań HTTP: aplikacja może podstawić własną
+        implementację lub skonfigurować klienta na adres serwera testowego. Testy własne
+        biblioteki (rozdz. 12) zdejmują przy tym z zespołów integrujących obowiązek
+        weryfikowania mechanizmów transportowych, które w przeciwnym razie musiałby
+        sprawdzać każdy z nich osobno.
+      </p>
+
+      <h3>13.9. Neutralność technologiczna i niski koszt wdrożenia</h3>
+      <p>
+        Rezygnacja z zależności od frameworku aplikacyjnego oznacza, że biblioteka działa
+        w aplikacji Spring Boot, Quarkus, w aplikacji desktopowej i w zwykłym programie
+        uruchamianym z wiersza poleceń. Dwie zależności czasu wykonania i artefakt
+        wielkości około 125 KiB minimalizują ryzyko konfliktu wersji z zależnościami hosta —
+        problemu, który w praktyce bywa główną przeszkodą we wdrożeniu bibliotek klienckich.
+      </p>
+
+      <h3>13.10. Skutki organizacyjne</h3>
+      <p>
+        Powyższe korzyści techniczne przekładają się na trzy efekty w skali organizacji:
+        skrócenie czasu wdrożenia nowej integracji, obniżenie kosztu utrzymania przez
+        skupienie zmian w jednym repozytorium oraz spójność zachowania wszystkich klientów
+        systemu, co upraszcza diagnostykę zgłoszeń produkcyjnych.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 12 · Porównanie integracji wykonanej samodzielnie z integracją opartą na SDK</caption>
+          <thead><tr><th>Zagadnienie</th><th>Integracja ad hoc</th><th>Integracja przez SDK</th></tr></thead>
+          <tbody>
+            <tr><td>Nakład na uruchomienie</td><td>implementacja transportu, uwierzytelniania i mapowania w każdej aplikacji</td><td>deklaracja zależności i konfiguracja klienta</td></tr>
+            <tr><td>Wykrywanie błędów kontraktu</td><td>w czasie wykonania</td><td>w znacznej części w czasie kompilacji</td></tr>
+            <tr><td>Cykl życia tokenu</td><td>implementowany osobno w każdej aplikacji</td><td>automatyczny, z ochroną przed wyścigiem</td></tr>
+            <tr><td>Ponowienia</td><td>zwykle globalne lub pominięte</td><td>zależne od bezpieczeństwa powtórzenia operacji</td></tr>
+            <tr><td>Ryzyko podwójnego naliczenia</td><td>realne przy globalnych ponowieniach</td><td>wykluczone konstrukcyjnie</td></tr>
+            <tr><td>Diagnostyka błędów</td><td>kod stanu i tekst odpowiedzi</td><td>typowane wyjątki z błędami pól i komunikatem biznesowym</td></tr>
+            <tr><td>Reakcja na zmianę API</td><td>zmiana w każdej integracji osobno</td><td>aktualizacja jednej zależności</td></tr>
+            <tr><td>Weryfikacja mechanizmów transportowych</td><td>po stronie każdego zespołu</td><td>49 testów w bibliotece</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <span class="label">Ujęcie krytyczne</span>
+        <p>
+          Rzetelna ocena wymaga wskazania również kosztów. Biblioteka wprowadza dodatkowy
+          artefakt do utrzymania i wersjonowania, tworzy zależność organizacyjną między
+          zespołem ją rozwijającym a zespołami integrującymi oraz — jeżeli nie nadąża
+          za rozwojem API — może stać się wąskim gardłem. Koszty te są uzasadnione przy
+          większej liczbie klientów systemu; przy pojedynczej integracji o niskiej złożoności
+          nakład na budowę i utrzymanie biblioteki może przewyższyć korzyści. W analizowanym
+          przypadku występują co najmniej dwie odrębne klasy klientów o rozłącznych rolach
+          oraz operacje wrażliwe finansowo, co przemawia za rozwiązaniem bibliotecznym.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ 14 ============ -->
+    <section id="ograniczenia">
+      <h2 class="chapter"><span class="num">14</span><span>Ograniczenia i kierunki rozwoju</span></h2>
+
+      <div class="table-wrap">
+        <table>
+          <caption>Tabela 13 · Znane ograniczenia</caption>
+          <thead><tr><th>Ograniczenie</th><th>Przyczyna</th></tr></thead>
+          <tbody>
+            <tr><td>Brak wariantu asynchronicznego</td><td>decyzja projektowa — docelowe zastosowania są synchroniczne; rozszerzenie możliwe bez zmiany istniejącego API</td></tr>
+            <tr><td>Brak obsługi <code>/api/admin/**</code></td><td>przestrzeń przeznaczona dla wewnętrznej aplikacji operatora, nie dla integracji zewnętrznych</td></tr>
+            <tr><td>Brak automatycznego pozyskiwania tokenu dla roli <code>ECOM</code></td><td>backend nie udostępnia odpowiedniego endpointu logowania</td></tr>
+            <tr><td>Brak stronicowania odczytów historii i kuponów</td><td>backend zwraca pełne kolekcje; stronicowanie wymagałoby zmiany po stronie serwera</td></tr>
+            <tr><td>Brak wbudowanej telemetrii i wyłącznika obwodu</td><td>świadomie pozostawione aplikacji hosta; biblioteka korzysta z <code>System.Logger</code>, który integruje się z systemem logowania hosta</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Kierunki dalszych prac</h3>
+      <ul>
+        <li>Wariant asynchroniczny oparty na <code>CompletableFuture</code>, wykorzystujący ten sam klient HTTP i tę samą politykę ponowień.</li>
+        <li>Instrumentacja zgodna z OpenTelemetry — metryki czasu odpowiedzi, liczby ponowień i wskaźnika błędów w podziale na operacje.</li>
+        <li>Generowanie modeli i sygnatur operacji ze specyfikacji OpenAPI, po jej udostępnieniu przez backend, co wyeliminowałoby rozjazd między kontraktem a biblioteką.</li>
+        <li>Publikacja artefaktu w repozytorium wewnętrznym wraz z wersjonowaniem semantycznym i deklarowaną polityką zgodności.</li>
+        <li>Testy kontraktowe uruchamiane wspólnie z backendem, potwierdzające zgodność obu stron po każdej zmianie.</li>
+      </ul>
+    </section>
+
+    <!-- ============ 15 ============ -->
+    <section id="zrodla">
+      <h2 class="chapter"><span class="num">15</span><span>Wykaz źródeł</span></h2>
+
+      <h3>Materiały pierwotne</h3>
+      <ul>
+        <li>Kod źródłowy systemu LoyaltyClub — kontrolery, obiekty transferu danych, warstwa usług, konfiguracja bezpieczeństwa i globalna obsługa wyjątków.</li>
+        <li>Kod źródłowy biblioteki LoyaltyClub Java SDK wraz z zestawem testów.</li>
+      </ul>
+
+      <h3>Standardy i specyfikacje</h3>
+      <ul>
+        <li>RFC 9110 — <i>HTTP Semantics</i>; definicja metod bezpiecznych i idempotentnych, stanowiąca podstawę klasyfikacji operacji z rozdziału 8.</li>
+        <li>RFC 7807 — <i>Problem Details for HTTP APIs</i>; format odpowiedzi błędnych stosowany przez backend.</li>
+        <li>RFC 7519 — <i>JSON Web Token</i>; format tokenu wydawanego przez endpoint logowania.</li>
+        <li>RFC 7617 — <i>The Basic HTTP Authentication Scheme</i>; schemat uwierzytelniania integracji e-commerce.</li>
+        <li>JEP 321 — <i>HTTP Client</i>; specyfikacja klienta HTTP wchodzącego w skład JDK, stanowiącego warstwę transportową biblioteki.</li>
+      </ul>
+
+      <h3>Środowisko weryfikacji</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Element</th><th>Wersja</th></tr></thead>
+          <tbody>
+            <tr><td>JDK</td><td>Eclipse Temurin 25.0.3</td></tr>
+            <tr><td>Apache Maven</td><td>3.9.16</td></tr>
+            <tr><td>Jackson</td><td>2.22.2</td></tr>
+            <tr><td>Lombok (zasięg <code>provided</code>)</td><td>1.18.46</td></tr>
+            <tr><td>JUnit</td><td>5.14.4</td></tr>
+            <tr><td>Backend LoyaltyClub</td><td>Spring Boot 3.2.3, Java 21</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="colophon">
+        Dokumentacja techniczna LoyaltyClub Java SDK 1.0.0-SNAPSHOT. Wszystkie dane liczbowe
+        — liczba plików, wierszy kodu, testów i zależności — pochodzą z pomiarów wykonanych
+        na repozytorium biblioteki w stanie opisanym w rozdziale 12.
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // Podświetlanie bieżącego rozdziału w spisie treści.
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+    if (!links.length || !('IntersectionObserver' in window)) return;
+
+    var byId = {};
+    links.forEach(function (link) {
+      byId[link.getAttribute('href').slice(1)] = link;
+    });
+
+    var visible = new Set();
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          visible.add(entry.target.id);
+        } else {
+          visible.delete(entry.target.id);
+        }
+      });
+
+      var order = Object.keys(byId);
+      var current = order.find(function (id) { return visible.has(id); });
+      if (!current) return;
+
+      links.forEach(function (link) { link.classList.remove('is-current'); });
+      byId[current].classList.add('is-current');
+    }, { rootMargin: '0px 0px -70% 0px', threshold: 0 });
+
+    Object.keys(byId).forEach(function (id) {
+      var section = document.getElementById(id);
+      if (section) observer.observe(section);
+    });
+  })();
+</script>
+</body>
+</html>
