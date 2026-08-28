@@ -1,0 +1,1 @@
+# loyaltyClub-java-sdk
