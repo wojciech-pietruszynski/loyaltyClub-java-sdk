@@ -11,7 +11,7 @@ import pl.pietruszynski.loyaltyclub.sdk.core.util.Validate;
  * Zamkniecie klienta zamyka pule polaczen tylko wtedy, gdy SDK samo ja utworzylo —
  * {@link HttpTransport.Builder#httpClient} dostarczony z zewnatrz pozostaje otwarty.
  */
-public abstract class AbstractApiClient implements AutoCloseable {
+public abstract class znaAbstractApiClient implements AutoCloseable {
 
     @Getter
     protected final HttpTransport transport;
