@@ -1,0 +1,183 @@
+// Pipeline budujący artefakt JAR biblioteki LoyaltyClub Java SDK.
+//
+// W odróżnieniu od pipeline'u backendu ten projekt jest biblioteką, a nie aplikacją
+// uruchamialną — pipeline kończy się na wytworzeniu i zarchiwizowaniu artefaktu.
+// Nie ma tu etapów zatrzymywania procesu, kopiowania na serwer ani startu aplikacji,
+// ponieważ SDK nie jest wdrażane, lecz konsumowane przez inne projekty.
+
+pipeline {
+    agent any
+
+    parameters {
+        string(
+            name: 'JDK_HOME',
+            defaultValue: '/usr/lib/jvm/java-25-openjdk-amd64',
+            description: 'Katalog JDK użyty do budowy. Projekt wymaga JDK 25 lub nowszego (maven.compiler.release=25).'
+        )
+        booleanParam(
+            name: 'POMIN_TESTY',
+            defaultValue: false,
+            description: 'Pomija etap testów. Do użycia wyłącznie przy pilnym odtworzeniu artefaktu ze znanego, przetestowanego commita.'
+        )
+        booleanParam(
+            name: 'DOLACZ_ZRODLA_I_JAVADOC',
+            defaultValue: true,
+            description: 'Buduje profil "release", który obok zwykłego JAR-a wytwarza artefakty ze źródłami i dokumentacją — ułatwiają pracę w IDE projektom konsumującym SDK.'
+        )
+        booleanParam(
+            name: 'INSTALUJ_W_REPO_LOKALNYM',
+            defaultValue: false,
+            description: 'Instaluje artefakt do lokalnego repozytorium Maven agenta (~/.m2), dzięki czemu inne buildy na tym samym agencie mogą go rozwiązać jako zależność.'
+        )
+    }
+
+    environment {
+        JAVA_HOME = "${params.JDK_HOME}"
+        PATH = "${params.JDK_HOME}/bin:${env.PATH}"
+        // Budowa biblioteki jest znacznie lżejsza od budowy backendu, ale limit
+        // pamięci zostaje — agent jest współdzielony z pipeline'em aplikacji.
+        MAVEN_OPTS = '-Xms256M -Xmx768M -XX:+UseG1GC'
+        // Tryb wsadowy i wyciszony transfer zależności dają czytelny log konsoli.
+        MVN_FLAGS = '-B -ntp'
+    }
+
+    options {
+        timestamps()
+        timeout(time: 20, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '10'))
+        disableConcurrentBuilds()
+    }
+
+    stages {
+
+        stage('Pobranie kodu') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Weryfikacja środowiska') {
+            steps {
+                echo '==== Sprawdzam wersję JDK i Mavena ===='
+                // Projekt kompiluje się do bajtkodu w wersji 25. Bez tej kontroli
+                // niezgodna wersja JDK objawiłaby się dopiero błędem javaca w połowie
+                // budowy — komunikatem, który nie wskazuje przyczyny.
+                sh '''
+                    set -e
+
+                    if [ ! -x "${JAVA_HOME}/bin/java" ]; then
+                        echo "BŁĄD: nie znaleziono JDK w katalogu ${JAVA_HOME}"
+                        echo "JDK dostępne na tym agencie:"
+                        ls -1 /usr/lib/jvm/ 2>/dev/null || echo "  (katalog /usr/lib/jvm nie istnieje)"
+                        echo "Wskaż właściwą ścieżkę parametrem JDK_HOME."
+                        exit 1
+                    fi
+
+                    WERSJA=$("${JAVA_HOME}/bin/java" -XshowSettings:properties -version 2>&1 |
+                        awk -F'= ' '/java\\.specification\\.version/ { gsub(/ /, "", $2); print $2 }')
+
+                    # Normalizacja do numeru głównego: JDK 8 raportuje "1.8", JDK 9+ samo "25".
+                    # Bez tego porównanie liczbowe przerywa się błędem, a warunek przepuszcza
+                    # niezgodne środowisko dalej.
+                    WERSJA_GLOWNA=$(echo "${WERSJA}" | sed 's/^1\\.//' | cut -d. -f1 | tr -cd '0-9')
+
+                    echo "Wykryta wersja JDK: ${WERSJA:-nieznana} (numer główny: ${WERSJA_GLOWNA:-brak})"
+
+                    if [ -z "${WERSJA_GLOWNA}" ] || [ "${WERSJA_GLOWNA}" -lt 25 ]; then
+                        echo "BŁĄD: projekt wymaga JDK 25 lub nowszego, a agent udostępnia: ${WERSJA:-nieznana}"
+                        echo "JDK dostępne na tym agencie:"
+                        ls -1 /usr/lib/jvm/ 2>/dev/null || true
+                        exit 1
+                    fi
+
+                    mvn ${MVN_FLAGS} -v
+                '''
+            }
+        }
+
+        stage('Testy jednostkowe') {
+            when {
+                expression { return !params.POMIN_TESTY }
+            }
+            steps {
+                echo '==== Uruchamiam testy SDK ===='
+                // "clean" wykonujemy tutaj, aby etap budowania mógł ponownie użyć
+                // klas skompilowanych na potrzeby testów i nie kompilował projektu drugi raz.
+                sh 'mvn ${MVN_FLAGS} clean test'
+            }
+            post {
+                always {
+                    junit(testResults: 'target/surefire-reports/*.xml', allowEmptyResults: false)
+                }
+            }
+        }
+
+        stage('Budowanie JAR') {
+            steps {
+                echo '==== Buduję artefakt JAR ===='
+                script {
+                    // Bez etapu testów target/ jest pusty, więc dokładamy "clean"
+                    // dla powtarzalności budowy.
+                    def cel = params.POMIN_TESTY ? 'clean package' : 'package'
+                    def profil = params.DOLACZ_ZRODLA_I_JAVADOC ? '-P release' : ''
+
+                    sh "mvn \${MVN_FLAGS} ${cel} -DskipTests ${profil}"
+                }
+            }
+        }
+
+        stage('Instalacja w repozytorium lokalnym') {
+            when {
+                expression { return params.INSTALUJ_W_REPO_LOKALNYM }
+            }
+            steps {
+                echo '==== Instaluję artefakt do ~/.m2 agenta ===='
+                sh 'mvn ${MVN_FLAGS} install -DskipTests'
+            }
+        }
+
+        stage('Podsumowanie artefaktów') {
+            steps {
+                script {
+                    def artefakty = sh(
+                        script: 'ls -1 target/*.jar 2>/dev/null || true',
+                        returnStdout: true
+                    ).trim()
+
+                    if (!artefakty) {
+                        error 'Budowa nie wytworzyła żadnego pliku JAR w katalogu target/.'
+                    }
+
+                    echo "Wytworzone artefakty:\n${artefakty}"
+
+                    // Opis buildu w interfejsie Jenkinsa — nazwa głównego artefaktu
+                    // pozwala rozpoznać wersję bez otwierania logu.
+                    def glowny = artefakty.readLines().find { !(it =~ /-(sources|javadoc)\.jar$/) }
+                    if (glowny) {
+                        currentBuild.description = glowny.replaceAll('^target/', '')
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            archiveArtifacts(
+                artifacts: 'target/*.jar',
+                fingerprint: true,
+                onlyIfSuccessful: true
+            )
+            echo '==== BUDOWA ZAKOŃCZONA POMYŚLNIE — artefakt zarchiwizowany w Jenkinsie ===='
+        }
+        unstable {
+            echo '==== BUDOWA NIESTABILNA — sprawdź raport testów ===='
+        }
+        failure {
+            echo '==== BUDOWA NIEUDANA — sprawdź konsolę Jenkinsa ===='
+        }
+        cleanup {
+            cleanWs()
+        }
+    }
+}
