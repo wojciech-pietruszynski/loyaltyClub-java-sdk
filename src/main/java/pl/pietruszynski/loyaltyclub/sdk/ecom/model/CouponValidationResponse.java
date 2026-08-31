@@ -20,8 +20,8 @@ public class CouponValidationResponse {
     String couponCode;
     String customerNumber;
 
-    /** Status kuponu w bazie, np. {@code ACTIVE}; {@code null}, gdy kuponu nie znaleziono. */
-    String couponStatus;
+    /** Stan kuponu w bazie; {@code null}, gdy kuponu nie znaleziono. */
+    CouponStatus couponStatus;
 
     LocalDateTime issuedAt;
     LocalDateTime expiresAt;

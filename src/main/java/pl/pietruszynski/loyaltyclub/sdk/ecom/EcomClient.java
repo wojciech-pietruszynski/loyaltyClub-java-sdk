@@ -5,6 +5,8 @@ import pl.pietruszynski.loyaltyclub.sdk.core.AbstractApiClient;
 import pl.pietruszynski.loyaltyclub.sdk.core.http.ApiRequest;
 import pl.pietruszynski.loyaltyclub.sdk.core.http.HttpMethod;
 import pl.pietruszynski.loyaltyclub.sdk.core.http.HttpTransport;
+import pl.pietruszynski.loyaltyclub.sdk.core.model.PageRequests;
+import pl.pietruszynski.loyaltyclub.sdk.core.model.PageResponse;
 import pl.pietruszynski.loyaltyclub.sdk.core.model.PointsBalance;
 import pl.pietruszynski.loyaltyclub.sdk.core.model.ServiceInfo;
 import pl.pietruszynski.loyaltyclub.sdk.core.util.Uris;
@@ -25,7 +27,7 @@ import java.util.List;
  * <pre>{@code
  * try (EcomClient ecom = EcomClient.builder()
  *         .baseUrl("http://localhost:8089")
- *         .basicAuth("ecom-shop", "haslo")
+ *         .credentials("ecom-shop", "haslo")
  *         .build()) {
  *
  *     EcomCustomerProfile profile = ecom.getCustomerProfile("CUST-000123");
@@ -50,6 +52,10 @@ public class EcomClient extends AbstractApiClient {
     };
     private static final TypeReference<List<CustomerCoupon>> COUPONS = new TypeReference<>() {
     };
+    private static final TypeReference<PageResponse<CustomerTransaction>> TRANSACTIONS_PAGE = new TypeReference<>() {
+    };
+    private static final TypeReference<PageResponse<CustomerCoupon>> COUPONS_PAGE = new TypeReference<>() {
+    };
 
     private final CouponClient couponClient;
 
@@ -63,7 +69,7 @@ public class EcomClient extends AbstractApiClient {
     }
 
     /**
-     * Klient {@code /api/coupon/**} korzystajacy z tych samych poswiadczen i tej samej puli polaczen.
+     * Klient {@code /api/coupon/**} korzystajacy z tej samej sesji i tej samej puli polaczen.
      * Nie zamykaj go osobno — zamkniecie tego klienta zamyka oba.
      */
     public CouponClient coupons() {
@@ -94,7 +100,7 @@ public class EcomClient extends AbstractApiClient {
 
     /**
      * {@code GET /api/ecom/customers/{customerNumber}/profile} — dane klienta wraz z progiem
-     * lojalnosciowym i kodem polecajacym.
+     * lojalnosciowym, dorobkiem punktowym, kodem polecajacym i stanem konta.
      *
      * @throws pl.pietruszynski.loyaltyclub.sdk.core.exception.NotFoundException gdy klient nie istnieje
      */
@@ -103,10 +109,26 @@ public class EcomClient extends AbstractApiClient {
     }
 
     /**
-     * {@code GET /api/ecom/customers/{customerNumber}/transactions} — historia punktowa klienta.
+     * {@code GET /api/ecom/customers/{customerNumber}/transactions} — cala historia punktowa
+     * klienta, rosnaco po dacie.
+     *
+     * <p>Dla kont z dluga historia siegnij po {@link #getTransactionsPage(String, Integer, Integer)}:
+     * ten wariant sciaga wszystko jednym zadaniem.
      */
     public List<CustomerTransaction> getTransactions(String customerNumber) {
         return transport.execute(customerRequest(customerNumber, "transactions"), TRANSACTIONS);
+    }
+
+    /**
+     * {@code GET /api/ecom/customers/{customerNumber}/transactions/paged} — historia punktowa
+     * strona po stronie, malejaco po dacie (najnowsze pierwsze).
+     *
+     * @param page numer strony liczony od zera; {@code null} oznacza pierwsza
+     * @param size rozmiar strony, najwyzej {@value PageRequests#MAX_PAGE_SIZE};
+     *             {@code null} zostawia backendowi wartosc domyslna ({@value PageRequests#DEFAULT_PAGE_SIZE})
+     */
+    public PageResponse<CustomerTransaction> getTransactionsPage(String customerNumber, Integer page, Integer size) {
+        return transport.execute(pagedRequest(customerNumber, "transactions/paged", page, size), TRANSACTIONS_PAGE);
     }
 
     /**
@@ -117,13 +139,45 @@ public class EcomClient extends AbstractApiClient {
         return transport.execute(customerRequest(customerNumber, "coupons"), COUPONS);
     }
 
+    /**
+     * {@code GET /api/ecom/customers/{customerNumber}/coupons/paged} — kupony klienta strona
+     * po stronie, malejaco po dacie wydania.
+     *
+     * @param page numer strony liczony od zera; {@code null} oznacza pierwsza
+     * @param size rozmiar strony, najwyzej {@value PageRequests#MAX_PAGE_SIZE};
+     *             {@code null} zostawia backendowi wartosc domyslna ({@value PageRequests#DEFAULT_PAGE_SIZE})
+     */
+    public PageResponse<CustomerCoupon> getCouponsPage(String customerNumber, Integer page, Integer size) {
+        return transport.execute(pagedRequest(customerNumber, "coupons/paged", page, size), COUPONS_PAGE);
+    }
+
     private ApiRequest customerRequest(String customerNumber, String resource) {
-        String normalized = Validate.requireText(customerNumber, "customerNumber");
         return ApiRequest.builder()
                 .method(HttpMethod.GET)
-                .path(BASE_PATH + "/customers/" + Uris.encodePathSegment(normalized) + "/" + resource)
+                .path(customerPath(customerNumber, resource))
                 .retryable(true)
                 .build();
+    }
+
+    private ApiRequest pagedRequest(String customerNumber, String resource, Integer page, Integer size) {
+        var builder = ApiRequest.builder()
+                .method(HttpMethod.GET)
+                .path(customerPath(customerNumber, resource))
+                .retryable(true);
+
+        // Parametr pominiety zostawia backendowi jego wartosc domyslna, wiec nie wysylamy go pusto.
+        if (PageRequests.validatePage(page) != null) {
+            builder.queryParam("page", page.toString());
+        }
+        if (PageRequests.validateSize(size) != null) {
+            builder.queryParam("size", size.toString());
+        }
+        return builder.build();
+    }
+
+    private String customerPath(String customerNumber, String resource) {
+        String normalized = Validate.requireText(customerNumber, "customerNumber");
+        return BASE_PATH + "/customers/" + Uris.encodePathSegment(normalized) + "/" + resource;
     }
 
     /** Builder klienta e-commerce. */
@@ -133,7 +187,8 @@ public class EcomClient extends AbstractApiClient {
         }
 
         public EcomClient build() {
-            return new EcomClient(buildTransport(requireAuthentication()));
+            requireCredentials();
+            return new EcomClient(buildEcomTransport());
         }
     }
 }

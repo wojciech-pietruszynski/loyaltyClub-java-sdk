@@ -1,31 +1,22 @@
 package pl.pietruszynski.loyaltyclub.sdk.store.auth;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import pl.pietruszynski.loyaltyclub.sdk.core.auth.RefreshingTokenAuthentication;
-import pl.pietruszynski.loyaltyclub.sdk.core.exception.LoyaltyClubException;
-import pl.pietruszynski.loyaltyclub.sdk.core.http.ApiRequest;
-import pl.pietruszynski.loyaltyclub.sdk.core.http.HttpMethod;
+import pl.pietruszynski.loyaltyclub.sdk.core.auth.JwtLoginAuthentication;
 import pl.pietruszynski.loyaltyclub.sdk.core.http.HttpTransport;
-import pl.pietruszynski.loyaltyclub.sdk.core.util.Validate;
-import pl.pietruszynski.loyaltyclub.sdk.store.model.StoreLoginRequest;
-import pl.pietruszynski.loyaltyclub.sdk.store.model.StoreLoginResponse;
 
 import java.time.Duration;
 import java.util.function.Supplier;
 
 /**
- * Uwierzytelnianie sklepu tokenem JWT z {@code POST /api/store/auth/login}.
+ * Sesja JWT kasy na {@code /api/store/auth/**}.
  *
- * <p>Token backendu zyje 15 minut, wiec SDK loguje sie ponownie samo — zaraz przed
- * uplywem waznosci oraz po odpowiedzi HTTP 401. Wywolujacy nie musi w ogole dotykac tokenu.
+ * <p>Token backendu zyje 15 minut, wiec SDK przedluza sesje samo — przez {@code /refresh}
+ * tuz przed uplywem waznosci, a po odpowiedzi HTTP 401 przez ponowne logowanie.
+ * Wywolujacy nie musi w ogole dotykac tokenu.
  */
-public class StoreJwtAuthentication extends RefreshingTokenAuthentication {
+public class StoreJwtAuthentication extends JwtLoginAuthentication {
 
-    public static final String LOGIN_PATH = "/api/store/auth/login";
-
-    private final Supplier<HttpTransport> transportSupplier;
-    private final String username;
-    private final String password;
+    public static final String BASE_PATH = "/api/store/auth";
+    public static final String LOGIN_PATH = BASE_PATH + "/login";
 
     /**
      * @param transportSupplier zrodlo transportu bez uwierzytelniania; leniwe, bo transport
@@ -36,33 +27,6 @@ public class StoreJwtAuthentication extends RefreshingTokenAuthentication {
                                   String username,
                                   String password,
                                   Duration refreshSkew) {
-        super(refreshSkew);
-        this.transportSupplier = Validate.requireNonNull(transportSupplier, "transportSupplier");
-        this.username = Validate.requireText(username, "username");
-        this.password = Validate.requireNonNull(password, "password");
-    }
-
-    @Override
-    protected Token fetchToken() {
-        HttpTransport transport = transportSupplier.get();
-        if (transport == null) {
-            throw new LoyaltyClubException("Transport nie jest jeszcze gotowy — klient nie zostal w pelni zbudowany");
-        }
-
-        StoreLoginResponse response = transport.execute(
-                ApiRequest.builder()
-                        .method(HttpMethod.POST)
-                        .path(LOGIN_PATH)
-                        .body(StoreLoginRequest.builder().username(username).password(password).build())
-                        // Logowanie nie zmienia stanu biznesowego, wiec ponowienie jest bezpieczne.
-                        .retryable(true)
-                        .build(),
-                new TypeReference<StoreLoginResponse>() {
-                });
-
-        if (response == null || response.getToken() == null || response.getToken().isBlank()) {
-            throw new LoyaltyClubException("Logowanie do " + LOGIN_PATH + " nie zwrocilo tokenu");
-        }
-        return new Token(response.getToken(), response.expiresAtInstant());
+        super(transportSupplier, BASE_PATH, username, password, refreshSkew);
     }
 }

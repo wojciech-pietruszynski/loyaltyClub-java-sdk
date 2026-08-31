@@ -33,11 +33,11 @@ public class CustomerCoupon {
     Integer validityDays;
     String couponPrefix;
 
-    /** Powod wydania kuponu, np. wymiana punktow albo akcja obslugi klienta. */
-    String reason;
+    /** Powod wydania kuponu: wymiana punktow albo akcja obslugi klienta. */
+    CouponReason reason;
 
-    /** Status kuponu nadany przez backend, np. {@code ACTIVE}, {@code USED}, {@code EXPIRED}. */
-    String status;
+    /** Stan kuponu wyliczony przez backend na moment odczytu. */
+    CouponStatus status;
 
     LocalDateTime issuedAt;
     LocalDateTime expiresAt;

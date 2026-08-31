@@ -19,8 +19,8 @@ import pl.pietruszynski.loyaltyclub.sdk.store.model.StoreReturnRequest;
 import pl.pietruszynski.loyaltyclub.sdk.store.model.StoreSaleRequest;
 import pl.pietruszynski.loyaltyclub.sdk.store.model.StoreTransactionItem;
 import pl.pietruszynski.loyaltyclub.sdk.store.model.StoreTransactionResponse;
-import pl.pietruszynski.loyaltyclub.sdk.store.model.TransactionState;
-import pl.pietruszynski.loyaltyclub.sdk.store.model.TransactionType;
+import pl.pietruszynski.loyaltyclub.sdk.core.model.TransactionState;
+import pl.pietruszynski.loyaltyclub.sdk.core.model.TransactionType;
 
 import java.math.BigDecimal;
 import java.time.Duration;

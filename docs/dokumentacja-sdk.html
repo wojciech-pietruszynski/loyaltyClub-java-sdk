@@ -518,8 +518,8 @@
       <div><dt>Wersja</dt><dd>1.0.0-SNAPSHOT</dd></div>
       <div><dt>Platforma</dt><dd>Java 25 · Maven</dd></div>
       <div><dt>Zależności runtime</dt><dd>2 (Jackson)</dd></div>
-      <div><dt>Kod produkcyjny</dt><dd>51 plików · 2 422 wiersze</dd></div>
-      <div><dt>Testy</dt><dd>49 · wszystkie zielone</dd></div>
+      <div><dt>Kod produkcyjny</dt><dd>58 plików · 2 975 wierszy</dd></div>
+      <div><dt>Testy</dt><dd>60 · wszystkie zielone</dd></div>
     </dl>
   </header>
 
@@ -670,8 +670,8 @@
           </thead>
           <tbody>
             <tr><td><code>/api/store/**</code></td><td><code>STORE</code></td><td>JWT lub HTTP Basic</td><td><code>StoreClient</code></td></tr>
-            <tr><td><code>/api/ecom/**</code></td><td><code>ECOM</code></td><td>HTTP Basic lub JWT</td><td><code>EcomClient</code></td></tr>
-            <tr><td><code>/api/coupon/**</code></td><td><code>ECOM</code></td><td>HTTP Basic lub JWT</td><td><code>CouponClient</code></td></tr>
+            <tr><td><code>/api/ecom/**</code></td><td><code>ECOM</code></td><td>JWT lub HTTP Basic</td><td><code>EcomClient</code></td></tr>
+            <tr><td><code>/api/coupon/**</code></td><td><code>ECOM</code></td><td>JWT lub HTTP Basic</td><td><code>CouponClient</code></td></tr>
             <tr><td><code>/api/admin/**</code></td><td><code>ADMIN</code>, <code>TECHNICAL</code></td><td>JWT</td><td>—</td></tr>
           </tbody>
         </table>
@@ -680,12 +680,21 @@
       <div class="callout">
         <span class="label">Ustalenie z analizy</span>
         <p>
-          Backend udostępnia endpoint logowania wyłącznie dla ról <code>STORE</code>
-          (<code>POST /api/store/auth/login</code>) oraz <code>ADMIN</code>. Dla roli
-          <code>ECOM</code> nie istnieje endpoint wydający token, mimo że filtr JWT akceptuje
-          tokeny z tą rolą. Praktyczną i domyślną metodą uwierzytelniania integracji
-          e-commerce jest zatem HTTP Basic; obsługa tokenu pozostaje dostępna dla wdrożeń,
-          które pozyskują go innym kanałem.
+          Backend udostępnia dziś każdej przestrzeni integracyjnej komplet punktów sesji:
+          <code>POST /api/{kanał}/auth/login</code>, <code>/refresh</code> i <code>/logout</code>,
+          obsługiwanych wspólnym <code>AuthenticationTokenService</code>. Wcześniej rola
+          <code>ECOM</code> nie miała punktu wydającego token — mimo że filtr JWT akceptował
+          tokeny z tą rolą — i jedyną praktyczną metodą uwierzytelnienia sklepu internetowego
+          było HTTP Basic, czyli hasło przesyłane przy każdym żądaniu. Uzupełnienie kontraktu
+          zniosło tę asymetrię: domyślną drogą obu integracji jest sesja tokenowa, a HTTP Basic
+          pozostaje wariantem awaryjnym.
+        </p>
+        <p>
+          Punkt <code>/refresh</code> ma tu konkretne znaczenie projektowe: pozwala przedłużyć
+          sesję samym tokenem, więc integracja nie musi przechowywać hasła dłużej niż do
+          pierwszego logowania. Punkt <code>/logout</code> wycofuje okazany token po stronie
+          serwera — bez niego token pozostawałby ważny do końca swojego czasu życia, także po
+          zakończeniu pracy przez integrację.
         </p>
       </div>
     </section>
@@ -711,15 +720,22 @@
           </thead>
           <tbody>
             <tr><td><code>POST /api/store/auth/login</code></td><td>—</td><td>wywoływane automatycznie</td></tr>
+            <tr><td><code>POST /api/store/auth/refresh</code></td><td><code>Authorization</code></td><td>wywoływane automatycznie</td></tr>
+            <tr><td><code>POST /api/store/auth/logout</code></td><td><code>Authorization</code></td><td><code>StoreClient.logout()</code></td></tr>
             <tr><td><code>GET /api/store</code></td><td>—</td><td><code>StoreClient.info()</code></td></tr>
             <tr><td><code>POST /api/store/transactions/sale</code></td><td><code>X-CountryCode</code></td><td><code>registerSale(...)</code></td></tr>
             <tr><td><code>POST /api/store/transactions/return</code></td><td><code>X-CountryCode</code></td><td><code>registerReturn(...)</code></td></tr>
             <tr><td><code>GET /api/store/customers/{cn}/points</code></td><td>—</td><td><code>getPointsBalance(cn)</code></td></tr>
+            <tr><td><code>POST /api/ecom/auth/login</code></td><td>—</td><td>wywoływane automatycznie</td></tr>
+            <tr><td><code>POST /api/ecom/auth/refresh</code></td><td><code>Authorization</code></td><td>wywoływane automatycznie</td></tr>
+            <tr><td><code>POST /api/ecom/auth/logout</code></td><td><code>Authorization</code></td><td><code>EcomClient.logout()</code></td></tr>
             <tr><td><code>GET /api/ecom</code></td><td>—</td><td><code>EcomClient.info()</code></td></tr>
             <tr><td><code>GET /api/ecom/customers/{cn}/points</code></td><td>—</td><td><code>getPointsBalance(cn)</code></td></tr>
             <tr><td><code>GET /api/ecom/customers/{cn}/profile</code></td><td>—</td><td><code>getCustomerProfile(cn)</code></td></tr>
             <tr><td><code>GET /api/ecom/customers/{cn}/transactions</code></td><td>—</td><td><code>getTransactions(cn)</code></td></tr>
+            <tr><td><code>GET /api/ecom/customers/{cn}/transactions/paged</code></td><td>—</td><td><code>getTransactionsPage(cn, page, size)</code></td></tr>
             <tr><td><code>GET /api/ecom/customers/{cn}/coupons</code></td><td>—</td><td><code>getCoupons(cn)</code></td></tr>
+            <tr><td><code>GET /api/ecom/customers/{cn}/coupons/paged</code></td><td>—</td><td><code>getCouponsPage(cn, page, size)</code></td></tr>
             <tr><td><code>POST /api/coupon/redeem-points</code></td><td><code>Idempotency-Key</code></td><td><code>redeemPoints(key, req)</code></td></tr>
             <tr><td><code>GET /api/coupon/validate</code></td><td>—</td><td><code>validate(code, cn)</code></td></tr>
           </tbody>
@@ -785,7 +801,7 @@
             <tr><td class="num-col">WF-5</td><td>Odczyt historii punktowej oraz listy kuponów klienta.</td></tr>
             <tr><td class="num-col">WF-6</td><td>Wymiana punktów na kupon z zachowaniem idempotencji operacji.</td></tr>
             <tr><td class="num-col">WF-7</td><td>Walidacja kuponu przy składaniu zamówienia.</td></tr>
-            <tr><td class="num-col">WF-8</td><td>Uwierzytelnianie tokenem JWT z automatycznym logowaniem oraz uwierzytelnianie HTTP Basic.</td></tr>
+            <tr><td class="num-col">WF-8</td><td>Sesja JWT prowadzona przez bibliotekę — logowanie, przedłużanie przez <code>/refresh</code>, wycofanie tokenu przez <code>/logout</code> — oraz uwierzytelnianie HTTP Basic.</td></tr>
           </tbody>
         </table>
       </div>
@@ -943,7 +959,7 @@
           <thead><tr><th>Pakiet</th><th>Odpowiedzialność</th></tr></thead>
           <tbody>
             <tr><td><code>sdk.core.http</code></td><td>Wykonanie żądania: budowa adresu, nagłówki, pętla ponowień, odwzorowanie odpowiedzi błędnych na wyjątki.</td></tr>
-            <tr><td><code>sdk.core.auth</code></td><td>Źródła poświadczeń: HTTP Basic, token statyczny, baza dla tokenu odświeżanego automatycznie.</td></tr>
+            <tr><td><code>sdk.core.auth</code></td><td>Źródła poświadczeń: HTTP Basic, token statyczny oraz sesja JWT (<code>JwtLoginAuthentication</code>) prowadzona automatycznie na <code>/api/{kanał}/auth/**</code>.</td></tr>
             <tr><td><code>sdk.core.retry</code></td><td>Polityka ponowień — liczba prób, opóźnienie wykładnicze z rozrzutem, zbiór kodów kwalifikujących.</td></tr>
             <tr><td><code>sdk.core.exception</code></td><td>Hierarchia wyjątków biblioteki.</td></tr>
             <tr><td><code>sdk.core.model</code></td><td>Typy wspólne dla obu integracji: saldo punktów, metadane usługi, <code>ProblemDetail</code>.</td></tr>
@@ -1313,8 +1329,9 @@
           <thead><tr><th>Klasa testowa</th><th class="num-col">Testy</th><th>Zakres</th></tr></thead>
           <tbody>
             <tr><td><code>HttpTransportTest</code></td><td class="num-col">12</td><td>ponowienia i ich brak, odnowienie poświadczeń po 401 i brak pętli, mapowanie kodów stanu, kodowanie parametrów, normalizacja adresu bazowego, odpowiedź niebędąca dokumentem <i>Problem Details</i></td></tr>
+            <tr><td><code>JwtSessionTest</code></td><td class="num-col">6</td><td>logowanie obu kanałów, przedłużenie sesji przez <code>/refresh</code> bez ponownego wysyłania hasła, powrót do logowania po odrzuconym odświeżeniu, wycofanie tokenu przez <code>/logout</code> i brak wywołania sieciowego, gdy sesji nie ma</td></tr>
             <tr><td><code>StoreClientTest</code></td><td class="num-col">13</td><td>jednokrotne logowanie i ponowne użycie tokenu, ponowne logowanie po 401, nagłówek <code>X-CountryCode</code> i zgodność ciała żądania, odrzucanie żądań niepoprawnych bez wywołania sieciowego, mapowanie błędów backendu</td></tr>
-            <tr><td><code>EcomClientTest</code></td><td class="num-col">15</td><td>wszystkie operacje odczytu, kodowanie numeru klienta w ścieżce, nagłówek <code>Idempotency-Key</code>, werdykty walidacji kuponu wraz z wartością nieznaną, samodzielny klient kuponowy</td></tr>
+            <tr><td><code>EcomClientTest</code></td><td class="num-col">20</td><td>wszystkie operacje odczytu wraz z wariantami stronicowanymi i lokalną kontrolą limitów strony, kodowanie numeru klienta w ścieżce, nagłówek <code>Idempotency-Key</code> i jego limit długości, werdykty walidacji kuponu wraz z wartością nieznaną, samodzielny klient kuponowy</td></tr>
             <tr><td><code>LoyaltyClubJsonTest</code></td><td class="num-col">5</td><td>format <code>LocalDateTime</code>, pomijanie pól pustych, tolerancja nieznanych pól, odczyt <code>ProblemDetail</code> z właściwością <code>errors</code></td></tr>
             <tr><td><code>RetryPolicyTest</code></td><td class="num-col">4</td><td>zbiór kodów kwalifikujących, wyłączenie ponawiania, wykładniczy wzrost i nasycenie opóźnienia, zakres rozrzutu losowego</td></tr>
           </tbody>
@@ -1322,7 +1339,7 @@
       </div>
 
       <p>
-        Łącznie 49 testów, wszystkie zakończone powodzeniem. Testy weryfikują zachowanie
+        Łącznie 60 testów, wszystkie zakończone powodzeniem. Testy weryfikują zachowanie
         obserwowalne z zewnątrz — treść wysłanego żądania i reakcję na odpowiedź serwera —
         a nie strukturę wewnętrzną implementacji, dzięki czemu pozostają odporne na refaktoryzację.
       </p>
@@ -1452,7 +1469,7 @@
             <tr><td>Ryzyko podwójnego naliczenia</td><td>realne przy globalnych ponowieniach</td><td>wykluczone konstrukcyjnie</td></tr>
             <tr><td>Diagnostyka błędów</td><td>kod stanu i tekst odpowiedzi</td><td>typowane wyjątki z błędami pól i komunikatem biznesowym</td></tr>
             <tr><td>Reakcja na zmianę API</td><td>zmiana w każdej integracji osobno</td><td>aktualizacja jednej zależności</td></tr>
-            <tr><td>Weryfikacja mechanizmów transportowych</td><td>po stronie każdego zespołu</td><td>49 testów w bibliotece</td></tr>
+            <tr><td>Weryfikacja mechanizmów transportowych</td><td>po stronie każdego zespołu</td><td>60 testów w bibliotece</td></tr>
           </tbody>
         </table>
       </div>
@@ -1515,7 +1532,7 @@
         <li>RFC 9110 — <i>HTTP Semantics</i>; definicja metod bezpiecznych i idempotentnych, stanowiąca podstawę klasyfikacji operacji z rozdziału 8.</li>
         <li>RFC 7807 — <i>Problem Details for HTTP APIs</i>; format odpowiedzi błędnych stosowany przez backend.</li>
         <li>RFC 7519 — <i>JSON Web Token</i>; format tokenu wydawanego przez endpoint logowania.</li>
-        <li>RFC 7617 — <i>The Basic HTTP Authentication Scheme</i>; schemat uwierzytelniania integracji e-commerce.</li>
+        <li>RFC 7617 — <i>The Basic HTTP Authentication Scheme</i>; awaryjny schemat uwierzytelniania integracji.</li>
         <li>JEP 321 — <i>HTTP Client</i>; specyfikacja klienta HTTP wchodzącego w skład JDK, stanowiącego warstwę transportową biblioteki.</li>
       </ul>
 
