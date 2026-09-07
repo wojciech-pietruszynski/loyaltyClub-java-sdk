@@ -54,6 +54,8 @@ public class HttpTransport implements AutoCloseable {
     private final Duration requestTimeout;
     @Getter
     private final RetryPolicy retryPolicy;
+    /** Zrodlo poswiadczen tego transportu; klienci siegaja po nie, by zamknac sesje tokenowa. */
+    @Getter
     private final AuthenticationProvider authentication;
     private final Map<String, String> defaultHeaders;
     private final String userAgent;

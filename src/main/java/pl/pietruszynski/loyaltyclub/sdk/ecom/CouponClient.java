@@ -17,7 +17,7 @@ import pl.pietruszynski.loyaltyclub.sdk.ecom.model.CouponValidationResponse;
  * <pre>{@code
  * try (CouponClient coupons = CouponClient.builder()
  *         .baseUrl("http://localhost:8089")
- *         .basicAuth("ecom-shop", "haslo")
+ *         .credentials("ecom-shop", "haslo")
  *         .build()) {
  *
  *     CouponValidationResponse validation = coupons.validate("PL-ABC123", "CUST-000123");
@@ -33,6 +33,9 @@ public class CouponClient extends AbstractApiClient {
 
     private static final String BASE_PATH = "/api/coupon";
     private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
+    /** Limit dlugosci klucza wymuszany przez backend; dluzszy konczy sie HTTP 400. */
+    public static final int MAX_IDEMPOTENCY_KEY_LENGTH = 100;
 
     private static final TypeReference<CouponRedeemResponse> REDEEM = new TypeReference<>() {
     };
@@ -56,10 +59,14 @@ public class CouponClient extends AbstractApiClient {
      * zamowienia lub akcji w sklepie, a nie swiezy UUID przy kazdej probie. Dzieki temu SDK
      * moze bezpiecznie ponowic to wywolanie po bledzie sieci.
      *
-     * @param idempotencyKey klucz idempotentnosci, wymagany
+     * @param idempotencyKey klucz idempotentnosci, wymagany; najwyzej
+     *                       {@value #MAX_IDEMPOTENCY_KEY_LENGTH} znakow
      */
     public CouponRedeemResponse redeemPoints(String idempotencyKey, CouponRedeemRequest request) {
         String normalizedKey = Validate.requireText(idempotencyKey, "idempotencyKey");
+        Validate.requireState(normalizedKey.length() <= MAX_IDEMPOTENCY_KEY_LENGTH,
+                "idempotencyKey moze miec najwyzej " + MAX_IDEMPOTENCY_KEY_LENGTH
+                        + " znakow, mial: " + normalizedKey.length());
         Validate.requireNonNull(request, "request");
         Validate.requireText(request.getCustomerNumber(), "customerNumber");
         Validate.requireNonNull(request.getCouponTemplateId(), "couponTemplateId");
@@ -97,7 +104,8 @@ public class CouponClient extends AbstractApiClient {
         }
 
         public CouponClient build() {
-            return new CouponClient(buildTransport(requireAuthentication()));
+            requireCredentials();
+            return new CouponClient(buildEcomTransport());
         }
     }
 }

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Builder;
 import lombok.Value;
 import lombok.extern.jackson.Jacksonized;
+import pl.pietruszynski.loyaltyclub.sdk.core.model.TransactionState;
+import pl.pietruszynski.loyaltyclub.sdk.core.model.TransactionType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

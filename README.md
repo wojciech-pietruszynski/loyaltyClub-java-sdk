@@ -7,7 +7,8 @@ kasową (`/api/store/**`) oraz e-commerce (`/api/ecom/**` i `/api/coupon/**`).
 - transport: `java.net.http.HttpClient` z JDK
 - jedyne zależności runtime: `jackson-databind` + `jackson-datatype-jsr310`
 - Lombok tylko na czas kompilacji (`provided`) — nie trafia do classpath aplikacji
-- automatyczne logowanie i odświeżanie tokenu JWT dla sklepu
+- sesja JWT prowadzona przez SDK dla obu kanałów: logowanie, przedłużanie przez `/refresh`
+  i wycofanie tokenu przez `/logout`
 - ponowienia z wykładniczym backoffem, wyłącznie dla operacji bezpiecznych do powtórzenia
 - walidacja żądań po stronie klienta, zanim pójdzie round-trip po HTTP 400
 
@@ -48,8 +49,9 @@ Wymagania: **JDK 25** i Maven 3.9+.
 
 ## Store — API kasowe
 
-Rola `STORE`. SDK loguje się przez `POST /api/store/auth/login` i samo wymienia token
-przed upływem ważności (backend daje 15 minut) oraz po odpowiedzi 401.
+Rola `STORE`. SDK loguje się przez `POST /api/store/auth/login` i samo przedłuża sesję
+przez `POST /api/store/auth/refresh`, zanim token wygaśnie (backend daje 15 minut).
+Hasło idzie po sieci raz — przy pierwszym logowaniu. Po odpowiedzi 401 SDK loguje się ponownie.
 
 ```java
 try (StoreClient store = StoreClient.builder()
@@ -84,6 +86,7 @@ try (StoreClient store = StoreClient.builder()
 | `registerSale(request)` / `registerSale(countryCode, request)` | `POST /api/store/transactions/sale` |
 | `registerReturn(request)` / `registerReturn(countryCode, request)` | `POST /api/store/transactions/return` |
 | `getPointsBalance(customerNumber)` | `GET /api/store/customers/{customerNumber}/points` |
+| `logout()` | `POST /api/store/auth/logout` |
 
 Nagłówek `X-CountryCode` jest doklejany automatycznie — z `defaultCountryCode` albo
 z jawnego parametru. Kod kraju jest normalizowany (trim + wielkie litery) i sprawdzany
@@ -104,23 +107,37 @@ store.registerReturn(StoreReturnRequest.builder()
 Alternatywne uwierzytelnienie (backend akceptuje oba): `.basicAuth("kasa-01", "haslo")`
 albo `.bearerToken(token)` dla tokenu zdobytego poza SDK.
 
+`store.logout()` wycofuje token przez `POST /api/store/auth/logout` — backend odnotowuje go
+jako unieważniony, więc przestaje działać przed końcem swojego czasu życia. Kolejne żądanie
+na tym samym kliencie zaloguje się od nowa. `close()` **nie** wywołuje wylogowania: zamknięcie
+klienta kończy życie puli połączeń, a unieważnienie sesji to osobna decyzja integracji.
+
 ---
 
 ## E-commerce — API odczytowe i kupony
 
-Rola `ECOM`. Backend **nie wystawia endpointu logowania dla tej roli**, więc domyślną drogą
-jest HTTP Basic; `bearerToken(...)` zostaje dla integracji, które zdobywają JWT własnym kanałem.
+Rola `ECOM`. Backend wystawia dla tej roli komplet punktów logowania
+(`/api/ecom/auth/login`, `/refresh`, `/logout`), więc domyślną drogą jest `credentials(...)`
+i sesja tokenowa — dokładnie jak dla kasy. `basicAuth(...)` nadal działa, ale przesyła hasło
+przy każdym żądaniu, więc zostaje wariantem awaryjnym; `bearerToken(...)` zostaje dla
+integracji, które zdobywają JWT własnym kanałem.
 
 ```java
 try (EcomClient ecom = EcomClient.builder()
         .baseUrl("http://localhost:8089")
-        .basicAuth("ecom-shop", "haslo")
+        .credentials("ecom-shop", "haslo")
         .build()) {
 
     EcomCustomerProfile profile = ecom.getCustomerProfile("CUST-000123");
     PointsBalance balance = ecom.getPointsBalance("CUST-000123");
     List<CustomerTransaction> history = ecom.getTransactions("CUST-000123");
     List<CustomerCoupon> coupons = ecom.getCoupons("CUST-000123");
+
+    // Konta z długą historią czyta się stroną po stronie.
+    PageResponse<CustomerTransaction> page = ecom.getTransactionsPage("CUST-000123", 0, 50);
+    while (page.hasNext()) {
+        page = ecom.getTransactionsPage("CUST-000123", page.nextPage(), 50);
+    }
 
     // Kupony korzystają z tych samych poświadczeń i tej samej puli połączeń.
     CouponValidationResponse validation = ecom.coupons().validate("PL-ABC123", "CUST-000123");
@@ -143,7 +160,10 @@ try (EcomClient ecom = EcomClient.builder()
 | `getPointsBalance(cn)` | `GET /api/ecom/customers/{cn}/points` |
 | `getCustomerProfile(cn)` | `GET /api/ecom/customers/{cn}/profile` |
 | `getTransactions(cn)` | `GET /api/ecom/customers/{cn}/transactions` |
+| `getTransactionsPage(cn, page, size)` | `GET /api/ecom/customers/{cn}/transactions/paged` |
 | `getCoupons(cn)` | `GET /api/ecom/customers/{cn}/coupons` |
+| `getCouponsPage(cn, page, size)` | `GET /api/ecom/customers/{cn}/coupons/paged` |
+| `logout()` | `POST /api/ecom/auth/logout` |
 | `CouponClient.redeemPoints(key, request)` | `POST /api/coupon/redeem-points` |
 | `CouponClient.validate(code, cn)` | `GET /api/coupon/validate` |
 
@@ -152,9 +172,20 @@ try (EcomClient ecom = EcomClient.builder()
 ```java
 CouponClient coupons = CouponClient.builder()
         .baseUrl("http://localhost:8089")
-        .basicAuth("ecom-shop", "haslo")
+        .credentials("ecom-shop", "haslo")
         .build();
 ```
+
+### Stronicowanie
+
+Warianty `...Page(cn, page, size)` odpowiadają endpointom `.../paged` backendu i zwracają
+`PageResponse<T>` — z `content`, `totalElements`, `totalPages` oraz skrótami `hasNext()`
+i `nextPage()`. `page` liczy się od zera; `null` w obu parametrach zostawia backendowi jego
+wartości domyślne (strona 0, rozmiar 25). Limit `size` to **200** — SDK sprawdza go lokalnie,
+bo naruszenie i tak skończyłoby się błędem 400.
+
+Wariant stronicowany sortuje malejąco (najnowsze pierwsze); wariant listowy zwraca całą
+kolekcję jednym żądaniem, historia transakcji rosnąco po dacie.
 
 ### Klucz idempotentności
 
@@ -272,7 +303,9 @@ Zanim żądanie pójdzie w sieć, SDK sprawdza to, co i tak sprawdzi backend:
 - `totalAmount` — dodatnia i **równa sumie cen pozycji** po zaokrągleniu do 2 miejsc
   w trybie HALF_UP (dokładnie ta sama normalizacja, co w `StoreTransactionService`)
 - `countryCode` — niepusty, maks. 3 znaki
-- `idempotencyKey`, `couponTemplateId`, `couponCode` — niepuste
+- `idempotencyKey`, `couponTemplateId`, `couponCode` — niepuste;
+  `idempotencyKey` dodatkowo maks. 100 znaków (limit backendu)
+- `page` — nieujemny, `size` — z zakresu `1..200` (limit `PageRequests` w backendzie)
 
 Naruszenie kończy się `LoyaltyClubValidationException` **bez wywołania sieciowego**.
 
@@ -282,8 +315,8 @@ Naruszenie kończy się `LoyaltyClubValidationException` **bez wywołania siecio
 
 - nieznane pola w odpowiedziach są ignorowane
 - nieznane wartości enumów mapują się na `UNKNOWN` zamiast wysadzać deserializację
-  (`TransactionType`, `TransactionState`, `CouponValidationStatus`) — nowy werdykt kuponu
-  traktuj jak odmowę
+  (`TransactionType`, `TransactionState`, `CustomerStatus`, `CouponStatus`, `CouponReason`,
+  `CouponValidationStatus`) — nowy werdykt kuponu traktuj jak odmowę
 - `LocalDateTime` jedzie jako ISO-8601 bez strefy, zgodnie z domyślną konfiguracją Jacksona
   po stronie Spring Boota
 
@@ -295,15 +328,19 @@ Naruszenie kończy się `LoyaltyClubValidationException` **bez wywołania siecio
 src/main/java/pl/pietruszynski/loyaltyclub/sdk/
 ├── core/                 wspólny fundament
 │   ├── http/             HttpTransport, ApiRequest, HttpMethod
-│   ├── auth/             Basic, Bearer, baza tokenu z auto-odświeżaniem
+│   ├── auth/             Basic, Bearer, JwtLoginAuthentication (login/refresh/logout)
 │   ├── retry/            RetryPolicy
 │   ├── exception/        hierarchia wyjątków
-│   ├── model/            PointsBalance, ServiceInfo, ProblemDetail
+│   ├── model/            PointsBalance, ServiceInfo, ProblemDetail, PageResponse,
+│   │                     LoginRequest/LoginResponse, TransactionType/State, CustomerStatus
 │   ├── json/             LoyaltyClubJson
 │   └── util/             Validate, Uris
 ├── store/                StoreClient, StoreRequestValidator, StoreJwtAuthentication, modele
-└── ecom/                 EcomClient, CouponClient, modele
+└── ecom/                 EcomClient, CouponClient, EcomJwtAuthentication, modele
 ```
+
+Typy dzielone przez oba kanały mieszkają w `core/model` — backend zwraca ten sam kształt
+z `/api/store` i z `/api/ecom`, więc SDK nie trzyma dwóch kopii tego samego enuma.
 
 ## Testy
 
@@ -311,6 +348,7 @@ src/main/java/pl/pietruszynski/loyaltyclub/sdk/
 mvn test
 ```
 
-49 testów na serwerze-atrapie opartym na `com.sun.net.httpserver` z JDK — bez dodatkowych
-zależności testowych. Pokrywają transport (retry, odświeżanie tokenu, mapowanie błędów,
-kodowanie URI), serializację JSON oraz obie integracje.
+60 testów na serwerze-atrapie opartym na `com.sun.net.httpserver` z JDK — bez dodatkowych
+zależności testowych. Pokrywają transport (retry, mapowanie błędów, kodowanie URI), sesję
+tokenową (logowanie, `/refresh`, powrót do logowania po odrzuconym odświeżeniu, `/logout`),
+serializację JSON, stronicowanie oraz obie integracje.

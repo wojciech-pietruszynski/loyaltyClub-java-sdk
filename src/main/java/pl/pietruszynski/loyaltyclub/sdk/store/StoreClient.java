@@ -180,7 +180,9 @@ public class StoreClient extends AbstractApiClient {
 
         /**
          * Poswiadczenia uzytkownika sklepu. SDK samo zaloguje sie przez
-         * {@code POST /api/store/auth/login} i bedzie odswiezac token przed wygasnieciem.
+         * {@code POST /api/store/auth/login} i bedzie przedluzac sesje przez
+         * {@code POST /api/store/auth/refresh}, zanim token wygasnie — kasa nie musi
+         * przechowywac hasla dluzej niz do pierwszego logowania.
          */
         public Builder credentials(String username, String password) {
             this.username = username;

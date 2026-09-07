@@ -74,6 +74,15 @@ public abstract class RefreshingTokenAuthentication implements AuthenticationPro
         }
     }
 
+    /**
+     * Token trzymany w pamieci — takze wtedy, gdy zblizyl sie juz do wygasniecia
+     * i {@link #currentToken()} wymienilby go na nowy. Podklasa uzywa go, by odswiezyc
+     * sesje zamiast logowac sie od nowa; {@code null} oznacza brak sesji.
+     */
+    protected Token cachedToken() {
+        return token;
+    }
+
     /** Wyrzuca zbuforowany token; nastepne zadanie zaloguje sie ponownie. */
     public void invalidate() {
         lock.lock();

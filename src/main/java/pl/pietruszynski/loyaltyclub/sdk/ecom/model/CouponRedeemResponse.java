@@ -19,8 +19,8 @@ public class CouponRedeemResponse {
 
     String customerNumber;
 
-    /** Status wydanego kuponu, np. {@code ACTIVE}. */
-    String status;
+    /** Stan wydanego kuponu; swiezo wydany jest zawsze {@link CouponStatus#ACTIVE}. */
+    CouponStatus status;
 
     LocalDateTime issuedAt;
     LocalDateTime expiresAt;
