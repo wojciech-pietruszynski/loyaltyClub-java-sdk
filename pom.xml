@@ -104,6 +104,15 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <!--
+                        Testy kontraktowe sprawdzaja biblioteke wobec DZIALAJACEJ instancji
+                        backendu, wiec nie moga wchodzic do domyslnego przebiegu - ten musi
+                        dzialac na czystej maszynie, bez infrastruktury. Uruchamia je
+                        profil "kontrakt".
+                    -->
+                    <excludedGroups>kontraktowy</excludedGroups>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -114,6 +123,30 @@
     </build>
 
     <profiles>
+        <!--
+            mvn test -P kontrakt  ->  wylacznie testy kontraktowe, wobec dzialajacego
+            backendu wskazanego zmienna LOYALTYCLUB_CONTRACT_BASE_URL. Bez tej zmiennej
+            przypadki sa POMIJANE, a nie zaliczane - pominiecie widac w raporcie,
+            natomiast test, ktory po cichu nic nie sprawdza, a raportuje sukces, jest
+            gorszy od jego braku.
+        -->
+        <profile>
+            <id>kontrakt</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${maven-surefire-plugin.version}</version>
+                        <configuration>
+                            <groups>kontraktowy</groups>
+                            <excludedGroups combine.self="override"/>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!-- mvn clean install -P release  -> dolacza artefakty sources i javadoc -->
         <profile>
             <id>release</id>
